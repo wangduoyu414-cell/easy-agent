@@ -1,0 +1,1 @@
+https://downloads.claude.ai/releases/win32/x64/Claude-1.24012.9-x64.msix

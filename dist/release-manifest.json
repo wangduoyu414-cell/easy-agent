@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "version": "0.1.0",
+  "status": "validation_pending",
+  "generated_at_utc": "2026-07-31T22:17:49.0019384Z",
+  "artifacts": [
+    {
+      "name": "AI-Client-Installer-windows-x64.exe",
+      "bytes": 9531904,
+      "sha256": "329c8884e33140d2896d5d21c6722481ba0f77e77cd6874dc73fe7a998559b26",
+      "signed": false
+    }
+  ],
+  "pending_targets": [
+    "windows-arm64",
+    "macos-universal",
+    "release-signing",
+    "clean-machine-product-install"
+  ]
+}

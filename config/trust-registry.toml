@@ -1,0 +1,153 @@
+schema_version = 1
+
+# This file is embedded into the executable. Remote metadata may narrow these
+# rules, but it may never add a host, package type, signer, or product identity.
+
+[[entries]]
+product = "work_buddy"
+os = "windows"
+architecture = "x64"
+enabled = false
+status_reason = "Windows x64 官方包与签名已静态取证，仍需干净机安装/复检后启用"
+entry_urls = ["https://www.workbuddy.cn/v2/update?platform=workbuddy-win32-x64-user"]
+url_rules = [
+  { host = "www.workbuddy.cn", exact_paths = ["/v2/update"] },
+  { host = "download.codebuddy.cn", path_prefixes = ["/workbuddy/"] }
+]
+package_kinds = ["exe"]
+signer_subjects = ["Tencent Technology (Shenzhen) Company Limited"]
+package_identity = "WorkBuddy"
+
+[[entries]]
+product = "work_buddy"
+os = "windows"
+architecture = "arm64"
+enabled = false
+status_reason = "官方更新接口未提供 Windows ARM64 原生包"
+entry_urls = []
+url_rules = []
+package_kinds = []
+
+[[entries]]
+product = "hermes"
+os = "windows"
+architecture = "x64"
+enabled = false
+status_reason = "官方 bootstrap 已取证，尚未完成干净机 desktop/runtime 分离复检"
+entry_urls = ["https://hermes-agent.nousresearch.com/"]
+url_rules = [
+  { host = "hermes-agent.nousresearch.com", exact_paths = ["/"] },
+  { host = "hermes-assets.nousresearch.com", exact_paths = ["/Hermes-Setup.exe"] }
+]
+package_kinds = ["exe"]
+signer_subjects = ["Nous Research Inc."]
+package_identity = "Hermes"
+
+[[entries]]
+product = "hermes"
+os = "windows"
+architecture = "arm64"
+enabled = false
+status_reason = "单一 bootstrap 的 ARM64 行为尚未完成真机证明"
+entry_urls = ["https://hermes-agent.nousresearch.com/"]
+url_rules = [
+  { host = "hermes-agent.nousresearch.com", exact_paths = ["/"] },
+  { host = "hermes-assets.nousresearch.com", exact_paths = ["/Hermes-Setup.exe"] }
+]
+package_kinds = ["exe"]
+signer_subjects = ["Nous Research Inc."]
+package_identity = "Hermes"
+
+[[entries]]
+product = "cc_switch"
+os = "windows"
+architecture = "x64"
+enabled = false
+status_reason = "签名更新清单合同已确认，仍需当前版本 MSI 干净机安装/复检"
+entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
+url_rules = [
+  { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
+  { host = "github.com", path_prefixes = ["/farion1231/cc-switch/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["msi"]
+package_identity = "CC Switch"
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
+
+[[entries]]
+product = "cc_switch"
+os = "windows"
+architecture = "arm64"
+enabled = false
+status_reason = "签名更新清单合同已确认，仍需 ARM64 真机安装/复检"
+entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
+url_rules = [
+  { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
+  { host = "github.com", path_prefixes = ["/farion1231/cc-switch/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["msi"]
+package_identity = "CC Switch"
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
+
+[[entries]]
+product = "claude"
+os = "windows"
+architecture = "x64"
+enabled = false
+status_reason = "官方 MSIX 端点已确认，Package Publisher/Family 与干净机安装证据尚未固定"
+entry_urls = ["https://claude.ai/api/desktop/win32/x64/msix/latest/redirect"]
+url_rules = [
+  { host = "claude.ai", exact_paths = ["/api/desktop/win32/x64/msix/latest/redirect"] },
+  { host = "downloads.claude.ai", path_prefixes = ["/releases/"] }
+]
+package_kinds = ["msix"]
+package_identity = "Claude"
+
+[[entries]]
+product = "claude"
+os = "windows"
+architecture = "arm64"
+enabled = false
+status_reason = "官方 MSIX 端点已确认，ARM64 Package Publisher/Family 与真机安装证据尚未固定"
+entry_urls = ["https://claude.ai/api/desktop/win32/arm64/msix/latest/redirect"]
+url_rules = [
+  { host = "claude.ai", exact_paths = ["/api/desktop/win32/arm64/msix/latest/redirect"] },
+  { host = "downloads.claude.ai", path_prefixes = ["/releases/"] }
+]
+package_kinds = ["msix"]
+package_identity = "Claude"
+
+[[entries]]
+product = "chat_gpt"
+os = "windows"
+architecture = "x64"
+enabled = false
+status_reason = "仅有 Microsoft Store/目录分发；完整依赖闭包与无 Store UI 直装尚未通过硬门"
+entry_urls = []
+url_rules = [
+  { host = "displaycatalog.mp.microsoft.com", path_prefixes = ["/"] },
+  { host = "fe3cr.delivery.mp.microsoft.com", path_prefixes = ["/"] },
+  { host = "storeapps.f.tlu.dl.delivery.mp.microsoft.com", path_prefixes = ["/"] }
+]
+package_kinds = ["msix"]
+package_identity = "OpenAI.Codex"
+package_family = "OpenAI.Codex_2p2nqsd0c76g0"
+
+[[entries]]
+product = "chat_gpt"
+os = "windows"
+architecture = "arm64"
+enabled = false
+status_reason = "仅有 Microsoft Store/目录分发；ARM64 依赖闭包与无 Store UI 直装尚未通过硬门"
+entry_urls = []
+url_rules = [
+  { host = "displaycatalog.mp.microsoft.com", path_prefixes = ["/"] },
+  { host = "fe3cr.delivery.mp.microsoft.com", path_prefixes = ["/"] },
+  { host = "storeapps.f.tlu.dl.delivery.mp.microsoft.com", path_prefixes = ["/"] }
+]
+package_kinds = ["msix"]
+package_identity = "OpenAI.Codex"
+package_family = "OpenAI.Codex_2p2nqsd0c76g0"

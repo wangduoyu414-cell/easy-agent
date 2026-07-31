@@ -1,0 +1,10 @@
+/target/
+/dist/*
+!/dist/.gitkeep
+!/dist/AI-Client-Installer-windows-x64.exe
+!/dist/SHA256SUMS-windows-x64.txt
+!/dist/SHA256SUMS.txt
+!/dist/release-manifest.json
+/evidence/runtime/
+*.log
+*.part
