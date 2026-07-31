@@ -9,7 +9,7 @@ use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichTex
 use crate::adapters::resolve_latest;
 use crate::core::{
     Detection, OperationUpdate, PlatformInfo, ProductId, ProductOperationResult, ProductView,
-    ReleaseCandidate, SupportState, TrustRegistry, run_install_batch,
+    ReleaseCandidate, SupportState, TrustRegistry, run_install_batch, version_is_older,
 };
 use crate::platform::{current_platform, detect_product};
 
@@ -199,13 +199,6 @@ impl InstallerApp {
         }
     }
 
-    fn selected_ready_count(&self) -> usize {
-        self.products
-            .iter()
-            .filter(|view| view.selected && view.support.can_install())
-            .count()
-    }
-
     fn start_install_batch(&mut self) {
         if self.batch_running {
             return;
@@ -247,98 +240,121 @@ impl eframe::App for InstallerApp {
                 .request_repaint_after(std::time::Duration::from_millis(100));
         }
 
-        egui::Frame::central_panel(ui.style()).show(ui, |ui| {
-            ui.add_space(22.0);
-            ui.vertical_centered(|ui| {
-                ui.heading(RichText::new("AI 客户端安装助手").size(30.0));
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new("只从已固定的官方来源解析、下载并验证安装包")
-                        .color(Color32::GRAY),
-                );
-            });
-            ui.add_space(18.0);
+        configure_visuals(ui.ctx());
+        let panel = egui::Frame::central_panel(ui.style()).fill(Color32::WHITE);
+        panel.show(ui, |ui| {
+            let content_width = 738.0_f32.min((ui.available_width() - 36.0).max(560.0));
+            let left = ui.max_rect().center().x - content_width / 2.0;
+            let content_rect = egui::Rect::from_min_max(
+                egui::pos2(left, ui.max_rect().top()),
+                egui::pos2(left + content_width, ui.max_rect().bottom()),
+            );
+            let mut clicked_product = None;
 
-            ui.horizontal(|ui| {
-                ui.label(format!("当前环境：{}", self.platform.description));
-                if ui
-                    .add_enabled(!self.scanning, egui::Button::new("刷新检测"))
-                    .clicked()
-                {
-                    self.start_scan();
-                }
-                if self.scanning {
-                    ui.spinner();
-                }
-            });
-
-            if let Some(error) = &self.registry_error {
-                ui.colored_label(Color32::RED, format!("信任注册表错误：{error}"));
-            }
-            ui.add_space(10.0);
-            ui.separator();
-
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for view in &mut self.products {
-                    ui.add_space(10.0);
-                    ui.horizontal_top(|ui| {
-                        ui.add_enabled(
-                            view.support.can_install(),
-                            egui::Checkbox::new(&mut view.selected, ""),
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(content_rect)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+                |ui| {
+                    ui.add_space(46.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new("客户端下载")
+                                .size(40.0)
+                                .strong()
+                                .color(Color32::from_rgb(18, 22, 29)),
                         );
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new(view.product.display_name()).size(19.0));
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(&view.status_line).color(Color32::DARK_GRAY),
-                                )
-                                .wrap(),
-                            );
-                            if let Some(reason) = view.support.detail() {
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(reason)
-                                            .small()
-                                            .color(Color32::from_rgb(156, 86, 0)),
-                                    )
-                                    .wrap(),
-                                );
-                            }
-                            let color = match view.support {
-                                SupportState::Ready => Color32::from_rgb(34, 139, 94),
-                                SupportState::Disabled(_) => Color32::from_rgb(156, 86, 0),
-                                SupportState::Unsupported(_) => Color32::GRAY,
-                            };
-                            ui.label(RichText::new(view.support.label()).strong().color(color));
-                        });
+                        ui.add_space(12.0);
+                        ui.label(
+                            RichText::new("选择需要安装的客户端")
+                                .size(19.0)
+                                .color(Color32::from_rgb(154, 158, 166)),
+                        );
                     });
-                    ui.add_space(10.0);
-                    ui.separator();
-                }
-            });
+                    ui.add_space(44.0);
 
-            ui.add_space(12.0);
-            let selected_count = self.selected_ready_count();
-            ui.horizontal(|ui| {
-                let install = ui.add_enabled(
-                    selected_count > 0 && !self.scanning && !self.batch_running,
-                    egui::Button::new(format!("确认并顺序安装（{selected_count}）")),
-                );
-                if install.clicked() {
-                    self.confirmation_open = true;
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for view in &self.products {
+                                if draw_product_row(ui, view, self.scanning, self.batch_running) {
+                                    clicked_product = Some(view.product);
+                                }
+                            }
+                        });
+
+                    ui.add_space(18.0);
+                    ui.vertical_centered(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 10.0;
+                            ui.label(
+                                RichText::new(self.platform.description.clone())
+                                    .size(12.0)
+                                    .color(Color32::from_rgb(165, 169, 177)),
+                            );
+                            ui.label(
+                                RichText::new("·")
+                                    .size(12.0)
+                                    .color(Color32::from_rgb(190, 193, 199)),
+                            );
+                            let refresh = ui.add_enabled(
+                                !self.scanning && !self.batch_running,
+                                egui::Button::new(
+                                    RichText::new(if self.scanning {
+                                        "正在检测"
+                                    } else {
+                                        "刷新状态"
+                                    })
+                                    .size(12.0)
+                                    .color(Color32::from_rgb(90, 130, 192)),
+                                )
+                                .frame(false),
+                            );
+                            if refresh.clicked() {
+                                self.start_scan();
+                            }
+                            if self.scanning {
+                                ui.spinner();
+                            }
+                            if self.batch_running {
+                                let cancel = ui.add(
+                                    egui::Button::new(
+                                        RichText::new("取消后续下载")
+                                            .size(12.0)
+                                            .color(Color32::from_rgb(180, 84, 72)),
+                                    )
+                                    .frame(false),
+                                );
+                                if cancel.clicked() {
+                                    self.cancel_flag.store(true, Ordering::Relaxed);
+                                }
+                            }
+                        });
+                        if let Some(summary) = &self.batch_summary {
+                            ui.add_space(4.0);
+                            ui.label(
+                                RichText::new(summary)
+                                    .size(12.0)
+                                    .color(Color32::from_rgb(120, 124, 132)),
+                            );
+                        }
+                        if let Some(error) = &self.registry_error {
+                            ui.add_space(4.0);
+                            ui.label(
+                                RichText::new(format!("配置不可用：{error}"))
+                                    .size(12.0)
+                                    .color(Color32::from_rgb(190, 70, 60)),
+                            );
+                        }
+                    });
+                },
+            );
+
+            if let Some(product) = clicked_product {
+                for view in &mut self.products {
+                    view.selected = view.product == product;
                 }
-                if self.batch_running && ui.button("取消后续下载").clicked() {
-                    self.cancel_flag.store(true, Ordering::Relaxed);
-                }
-                ui.label(
-                    RichText::new("未完成 proof 的项目不会回退到商店引导器、远程脚本或第三方镜像")
-                        .small()
-                        .color(Color32::GRAY),
-                );
-            });
-            if let Some(summary) = &self.batch_summary {
-                ui.add_space(6.0);
-                ui.label(summary);
+                self.confirmation_open = true;
             }
         });
 
@@ -396,7 +412,228 @@ impl eframe::App for InstallerApp {
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        [0.98, 0.98, 0.98, 1.0]
+        [1.0, 1.0, 1.0, 1.0]
+    }
+}
+
+fn configure_visuals(context: &egui::Context) {
+    let mut visuals = egui::Visuals::light();
+    visuals.panel_fill = Color32::WHITE;
+    visuals.window_fill = Color32::WHITE;
+    visuals.extreme_bg_color = Color32::WHITE;
+    visuals.faint_bg_color = Color32::from_rgb(248, 250, 253);
+    visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
+    context.set_visuals(visuals);
+}
+
+fn draw_product_row(
+    ui: &mut egui::Ui,
+    view: &ProductView,
+    scanning: bool,
+    batch_running: bool,
+) -> bool {
+    let row_height = 102.0;
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), row_height),
+        egui::Sense::hover(),
+    );
+    let mut clicked = false;
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(egui::vec2(16.0, 0.0)))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        |ui| {
+            let (icon_rect, _) =
+                ui.allocate_exact_size(egui::vec2(52.0, 52.0), egui::Sense::hover());
+            draw_product_icon(ui.painter(), icon_rect, view.product);
+            ui.add_space(22.0);
+
+            ui.allocate_ui_with_layout(
+                egui::vec2((rect.width() - 220.0).max(280.0), 58.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.label(
+                        RichText::new(view.product.display_name())
+                            .size(22.0)
+                            .color(Color32::from_rgb(24, 28, 35)),
+                    );
+                    ui.add_space(7.0);
+                    ui.label(
+                        RichText::new(product_subtitle(view, scanning, batch_running))
+                            .size(12.5)
+                            .color(subtitle_color(view)),
+                    );
+                },
+            );
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let (label, enabled) = product_action(view, scanning, batch_running);
+                let blue = Color32::from_rgb(66, 124, 216);
+                let button = egui::Button::new(RichText::new(label).size(17.0).color(if enabled {
+                    blue
+                } else {
+                    Color32::from_rgb(157, 164, 175)
+                }))
+                .min_size(egui::vec2(94.0, 43.0))
+                .fill(Color32::WHITE)
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    if enabled {
+                        blue
+                    } else {
+                        Color32::from_rgb(207, 212, 220)
+                    },
+                ))
+                .corner_radius(6.0);
+                if ui.add_enabled(enabled, button).clicked() {
+                    clicked = true;
+                }
+            });
+        },
+    );
+    ui.painter().line_segment(
+        [rect.left_bottom(), rect.right_bottom()],
+        egui::Stroke::new(1.0, Color32::from_rgb(232, 235, 240)),
+    );
+    clicked
+}
+
+fn product_subtitle(view: &ProductView, scanning: bool, batch_running: bool) -> String {
+    if batch_running && view.selected {
+        return view.status_line.clone();
+    }
+    if scanning && view.latest.is_none() {
+        return "正在检测安装状态与官方版本".into();
+    }
+    match (
+        view.detection.installed,
+        view.detection.version.as_deref(),
+        view.latest.as_ref(),
+    ) {
+        (true, Some(installed), Some(latest)) => {
+            if version_is_older(installed, &latest.version) {
+                format!("已安装 {installed} · 可更新至 {}", latest.version)
+            } else {
+                format!("已安装 {installed} · 已是最新版本")
+            }
+        }
+        (true, Some(installed), None) => format!("已安装 {installed}"),
+        (true, None, _) => "已检测到安装".into(),
+        (false, _, Some(latest)) => format!("最新版本 {}", latest.version),
+        (false, _, None) if matches!(view.support, SupportState::Unsupported(_)) => {
+            "当前系统或架构不支持".into()
+        }
+        (false, _, None) => "官方版本信息暂不可用".into(),
+    }
+}
+
+fn subtitle_color(view: &ProductView) -> Color32 {
+    match view.support {
+        SupportState::Ready => Color32::from_rgb(132, 137, 145),
+        SupportState::Disabled(_) => Color32::from_rgb(142, 147, 156),
+        SupportState::Unsupported(_) => Color32::from_rgb(165, 169, 177),
+    }
+}
+
+fn product_action(view: &ProductView, scanning: bool, batch_running: bool) -> (&'static str, bool) {
+    if batch_running && view.selected {
+        return ("处理中", false);
+    }
+    if scanning && view.latest.is_none() {
+        return ("检测中", false);
+    }
+    match &view.support {
+        SupportState::Disabled(_) => ("待验证", false),
+        SupportState::Unsupported(_) => ("不支持", false),
+        SupportState::Ready => {
+            let Some(latest) = &view.latest else {
+                return ("不可用", false);
+            };
+            if let Some(installed) = view.detection.version.as_deref() {
+                if version_is_older(installed, &latest.version) {
+                    ("更新", true)
+                } else {
+                    ("已安装", false)
+                }
+            } else {
+                ("下载", true)
+            }
+        }
+    }
+}
+
+fn draw_product_icon(painter: &egui::Painter, rect: egui::Rect, product: ProductId) {
+    let center = rect.center();
+    match product {
+        ProductId::Hermes => {
+            let black = Color32::from_rgb(30, 32, 36);
+            for (offset, scale) in [(0.0, 1.0), (8.0, 0.82), (15.0, 0.62)] {
+                let y = center.y - 13.0 + offset;
+                let points = vec![
+                    egui::pos2(center.x - 17.0 * scale, y + 9.0 * scale),
+                    egui::pos2(center.x + 13.0 * scale, y - 8.0 * scale),
+                    egui::pos2(center.x + 8.0 * scale, y + 7.0 * scale),
+                    egui::pos2(center.x - 14.0 * scale, y + 15.0 * scale),
+                ];
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    black,
+                    egui::Stroke::NONE,
+                ));
+            }
+        }
+        ProductId::Claude => {
+            let orange = Color32::from_rgb(220, 103, 60);
+            painter.circle_filled(center, 5.5, orange);
+            for index in 0..12 {
+                let angle = index as f32 * std::f32::consts::TAU / 12.0;
+                let direction = egui::vec2(angle.cos(), angle.sin());
+                painter.line_segment(
+                    [center + direction * 9.0, center + direction * 22.0],
+                    egui::Stroke::new(3.0, orange),
+                );
+            }
+        }
+        ProductId::ChatGpt => {
+            let black = Color32::from_rgb(20, 23, 27);
+            for index in 0..6 {
+                let angle = index as f32 * std::f32::consts::TAU / 6.0;
+                let loop_center = center + egui::vec2(angle.cos(), angle.sin()) * 8.0;
+                painter.circle_stroke(loop_center, 12.0, egui::Stroke::new(2.7, black));
+            }
+            painter.circle_filled(center, 5.0, Color32::WHITE);
+            painter.circle_stroke(center, 7.0, egui::Stroke::new(2.5, black));
+        }
+        ProductId::WorkBuddy => {
+            painter.text(
+                center,
+                egui::Align2::CENTER_CENTER,
+                "W",
+                egui::FontId::proportional(38.0),
+                Color32::from_rgb(60, 132, 226),
+            );
+        }
+        ProductId::CcSwitch => {
+            let gray = Color32::from_rgb(112, 132, 155);
+            painter.rect_stroke(
+                rect.shrink(5.0),
+                8.0,
+                egui::Stroke::new(2.0, gray),
+                egui::StrokeKind::Middle,
+            );
+            let y1 = center.y - 7.0;
+            let y2 = center.y + 7.0;
+            painter.arrow(
+                egui::pos2(center.x + 13.0, y1),
+                egui::vec2(-25.0, 0.0),
+                egui::Stroke::new(2.2, gray),
+            );
+            painter.arrow(
+                egui::pos2(center.x - 13.0, y2),
+                egui::vec2(25.0, 0.0),
+                egui::Stroke::new(2.2, gray),
+            );
+        }
     }
 }
 

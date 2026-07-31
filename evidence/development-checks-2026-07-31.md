@@ -11,9 +11,9 @@ Executed successfully:
 - `cargo test --test resolver_fixtures` — 5 passed
 - `cargo test --test security_boundaries` — 6 passed
 - Debug GUI process smoke test — process remained running for 12 seconds
-- Windows UI visual inspection — Chinese font rendered, long status text wrapped, light background and disabled proof gates visible
+- Windows UI visual inspection — reference-aligned pure-white centered layout rendered correctly at 1040×760, including Chinese title/subtitle, five product rows, custom vector icons, compact version/status text, outlined right-side actions, platform footer, and disabled proof gates
 - Live official resolution during GUI smoke test — Hermes `0.19.1`, Claude `1.24012.9`, WorkBuddy `5.3.5.34189228`, CC Switch `3.19.1`; ChatGPT Windows remained explicit No-Go
-- Windows x64 release build — `dist/AI-Client-Installer-windows-x64.exe`, 9,531,904 bytes, SHA-256 `329c8884e33140d2896d5d21c6722481ba0f77e77cd6874dc73fe7a998559b26`
+- Windows x64 release build after UI redesign — `dist/AI-Client-Installer-windows-x64.exe`, 9,532,928 bytes, SHA-256 `3b0fe7ab32b87cb83465a8765cd2f5737f9b307cc632341446ecef7cf1a9076e`
 - Release EXE process smoke test — process remained running for 10 seconds
 - `cargo audit` — scanned 473 locked dependencies against 1,177 RustSec advisories; no vulnerability reported
 - Windows ARM64 Rust standard library target installed successfully
