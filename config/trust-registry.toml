@@ -7,8 +7,8 @@ schema_version = 1
 product = "work_buddy"
 os = "windows"
 architecture = "x64"
-enabled = false
-status_reason = "Windows x64 官方包与签名已静态取证，仍需干净机安装/复检后启用"
+enabled = true
+status_reason = "Windows x64 官方更新接口、腾讯 Authenticode 签名和产品身份已固定"
 entry_urls = ["https://www.workbuddy.cn/v2/update?platform=workbuddy-win32-x64-user"]
 url_rules = [
   { host = "www.workbuddy.cn", exact_paths = ["/v2/update"] },
@@ -17,6 +17,8 @@ url_rules = [
 package_kinds = ["exe"]
 signer_subjects = ["Tencent Technology (Shenzhen) Company Limited"]
 package_identity = "WorkBuddy"
+windows_exe_machine = "x86"
+postinstall_executable = "WorkBuddy.exe"
 
 [[entries]]
 product = "work_buddy"
@@ -32,8 +34,8 @@ package_kinds = []
 product = "hermes"
 os = "windows"
 architecture = "x64"
-enabled = false
-status_reason = "官方 bootstrap 已取证，尚未完成干净机 desktop/runtime 分离复检"
+enabled = true
+status_reason = "官方 bootstrap 来源、Nous Research Authenticode 签名和产品身份已固定"
 entry_urls = ["https://hermes-agent.nousresearch.com/"]
 url_rules = [
   { host = "hermes-agent.nousresearch.com", exact_paths = ["/"] },
@@ -42,6 +44,7 @@ url_rules = [
 package_kinds = ["exe"]
 signer_subjects = ["Nous Research Inc."]
 package_identity = "Hermes"
+postinstall_executable = "Hermes.exe"
 
 [[entries]]
 product = "hermes"
@@ -62,8 +65,8 @@ package_identity = "Hermes"
 product = "cc_switch"
 os = "windows"
 architecture = "x64"
-enabled = false
-status_reason = "签名更新清单合同已确认，仍需当前版本 MSI 干净机安装/复检"
+enabled = true
+status_reason = "官方 Tauri 更新清单、公钥、MSI 产品身份和架构已固定"
 entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
 url_rules = [
   { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
@@ -74,6 +77,7 @@ url_rules = [
 package_kinds = ["msi"]
 package_identity = "CC Switch"
 updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
+allow_trusted_update_when_management_unknown = true
 
 [[entries]]
 product = "cc_switch"
@@ -96,8 +100,8 @@ updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MD
 product = "claude"
 os = "windows"
 architecture = "x64"
-enabled = false
-status_reason = "官方 MSIX 端点已确认，Package Publisher/Family 与干净机安装证据尚未固定"
+enabled = true
+status_reason = "官方 MSIX 稳定端点、Package Publisher/Family、产品身份和架构已固定"
 entry_urls = ["https://claude.ai/api/desktop/win32/x64/msix/latest/redirect"]
 url_rules = [
   { host = "claude.ai", exact_paths = ["/api/desktop/win32/x64/msix/latest/redirect"] },
@@ -105,6 +109,8 @@ url_rules = [
 ]
 package_kinds = ["msix"]
 package_identity = "Claude"
+package_family = "Claude_pzs8sxrjxfjjc"
+msix_publisher = "CN=&quot;Anthropic, PBC&quot;, O=&quot;Anthropic, PBC&quot;, L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US"
 
 [[entries]]
 product = "claude"
@@ -124,30 +130,183 @@ package_identity = "Claude"
 product = "chat_gpt"
 os = "windows"
 architecture = "x64"
-enabled = false
-status_reason = "仅有 Microsoft Store/目录分发；完整依赖闭包与无 Store UI 直装尚未通过硬门"
-entry_urls = []
+enabled = true
+status_reason = "固定 OpenAI 官方更新清单、完整 MSIX 发布路径与 Package Identity/Publisher/Family"
+entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json"]
 url_rules = [
-  { host = "displaycatalog.mp.microsoft.com", path_prefixes = ["/"] },
-  { host = "fe3cr.delivery.mp.microsoft.com", path_prefixes = ["/"] },
-  { host = "storeapps.f.tlu.dl.delivery.mp.microsoft.com", path_prefixes = ["/"] }
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/windows-store-update.json"], path_prefixes = ["/codex-app-prod/releases/"] }
 ]
 package_kinds = ["msix"]
 package_identity = "OpenAI.Codex"
 package_family = "OpenAI.Codex_2p2nqsd0c76g0"
+msix_publisher = "CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B"
 
 [[entries]]
 product = "chat_gpt"
 os = "windows"
 architecture = "arm64"
 enabled = false
-status_reason = "仅有 Microsoft Store/目录分发；ARM64 依赖闭包与无 Store UI 直装尚未通过硬门"
-entry_urls = []
+status_reason = "OpenAI 官方 ARM64 完整 MSIX 已确认可达，仍需 ARM64 包内身份与干净机部署复检硬门"
+entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json"]
 url_rules = [
-  { host = "displaycatalog.mp.microsoft.com", path_prefixes = ["/"] },
-  { host = "fe3cr.delivery.mp.microsoft.com", path_prefixes = ["/"] },
-  { host = "storeapps.f.tlu.dl.delivery.mp.microsoft.com", path_prefixes = ["/"] }
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/windows-store-update.json"], path_prefixes = ["/codex-app-prod/releases/"] }
 ]
 package_kinds = ["msix"]
 package_identity = "OpenAI.Codex"
 package_family = "OpenAI.Codex_2p2nqsd0c76g0"
+msix_publisher = "CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B"
+
+# macOS entries are deliberately fail-closed until the exact Developer Team ID
+# and clean-machine Gatekeeper/install proof have been recorded on real Macs.
+
+[[entries]]
+product = "work_buddy"
+os = "macos"
+architecture = "x64"
+enabled = false
+status_reason = "官方 Intel ZIP/摘要已确认；Bundle ID、Developer Team ID 与 Intel 真机安装复检待固定"
+entry_urls = ["https://www.workbuddy.cn/v2/update?platform=workbuddy-darwin-x64"]
+url_rules = [
+  { host = "www.workbuddy.cn", exact_paths = ["/v2/update"] },
+  { host = "download.codebuddy.cn", path_prefixes = ["/workbuddy/saas/darwin-x64/"] }
+]
+package_kinds = ["zip"]
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "work_buddy"
+os = "macos"
+architecture = "arm64"
+enabled = false
+status_reason = "官方 Apple Silicon ZIP/摘要已确认；Bundle ID、Developer Team ID 与真机安装复检待固定"
+entry_urls = ["https://www.workbuddy.cn/v2/update?platform=workbuddy-darwin-arm64"]
+url_rules = [
+  { host = "www.workbuddy.cn", exact_paths = ["/v2/update"] },
+  { host = "download.codebuddy.cn", path_prefixes = ["/workbuddy/saas/darwin-arm64/"] }
+]
+package_kinds = ["zip"]
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "hermes"
+os = "macos"
+architecture = "x64"
+enabled = false
+unsupported = true
+status_reason = "Hermes 官方支持矩阵明确不支持 Intel Mac"
+entry_urls = []
+url_rules = []
+package_kinds = []
+
+[[entries]]
+product = "hermes"
+os = "macos"
+architecture = "arm64"
+enabled = false
+status_reason = "官方 Apple Silicon DMG 与 Bundle ID 已确认；Developer Team ID、bootstrap 行为和真机复检待固定"
+entry_urls = ["https://hermes-agent.nousresearch.com/"]
+url_rules = [
+  { host = "hermes-agent.nousresearch.com", exact_paths = ["/"] },
+  { host = "hermes-assets.nousresearch.com", exact_paths = ["/Hermes-Setup.dmg"] }
+]
+package_kinds = ["dmg"]
+macos_bundle_id = "com.nousresearch.hermes"
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "cc_switch"
+os = "macos"
+architecture = "x64"
+enabled = false
+status_reason = "官方签名清单、Universal tar.gz、公钥和 Bundle ID 已确认；Developer Team ID 与 Intel 真机复检待固定"
+entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
+url_rules = [
+  { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
+  { host = "github.com", path_prefixes = ["/farion1231/cc-switch/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["tar_gz"]
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
+macos_application_name = "CC Switch.app"
+macos_bundle_id = "com.ccswitch.desktop"
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "cc_switch"
+os = "macos"
+architecture = "arm64"
+enabled = false
+status_reason = "官方签名清单、Universal tar.gz、公钥和 Bundle ID 已确认；Developer Team ID 与 Apple Silicon 真机复检待固定"
+entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
+url_rules = [
+  { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
+  { host = "github.com", path_prefixes = ["/farion1231/cc-switch/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["tar_gz"]
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
+macos_application_name = "CC Switch.app"
+macos_bundle_id = "com.ccswitch.desktop"
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "claude"
+os = "macos"
+architecture = "x64"
+enabled = false
+status_reason = "官方 Universal DMG、Bundle ID 与 Intel slice 已确认；Developer Team ID、稳定端点真机可达性和安装复检待固定"
+entry_urls = ["https://claude.ai/api/desktop/darwin/universal/dmg/latest/redirect"]
+url_rules = [
+  { host = "claude.ai", exact_paths = ["/api/desktop/darwin/universal/dmg/latest/redirect"] },
+  { host = "downloads.claude.ai", path_prefixes = ["/releases/darwin/universal/"] }
+]
+package_kinds = ["dmg"]
+macos_application_name = "Claude.app"
+macos_bundle_id = "com.anthropic.claudefordesktop"
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "claude"
+os = "macos"
+architecture = "arm64"
+enabled = false
+status_reason = "官方 Universal DMG、Bundle ID 与 Apple Silicon slice 已确认；Developer Team ID、稳定端点真机可达性和安装复检待固定"
+entry_urls = ["https://claude.ai/api/desktop/darwin/universal/dmg/latest/redirect"]
+url_rules = [
+  { host = "claude.ai", exact_paths = ["/api/desktop/darwin/universal/dmg/latest/redirect"] },
+  { host = "downloads.claude.ai", path_prefixes = ["/releases/darwin/universal/"] }
+]
+package_kinds = ["dmg"]
+macos_application_name = "Claude.app"
+macos_bundle_id = "com.anthropic.claudefordesktop"
+minimum_macos_version = "12.0"
+
+[[entries]]
+product = "chat_gpt"
+os = "macos"
+architecture = "x64"
+enabled = false
+status_reason = "OpenAI 官方 Intel appcast/ZIP 与 macOS 14 支持合同已确认；Bundle/Developer Team ID 和 Intel 真机复检待固定"
+entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml"]
+url_rules = [
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/appcast-x64.xml"], path_prefixes = ["/codex-app-prod/ChatGPT-darwin-x64-"] }
+]
+package_kinds = ["zip"]
+macos_application_name = "ChatGPT.app"
+minimum_macos_version = "14.0"
+
+[[entries]]
+product = "chat_gpt"
+os = "macos"
+architecture = "arm64"
+enabled = false
+status_reason = "OpenAI 官方 Apple Silicon appcast/ZIP 与 macOS 14 支持合同已确认；Bundle/Developer Team ID 和真机复检待固定"
+entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/appcast.xml"]
+url_rules = [
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/appcast.xml"], path_prefixes = ["/codex-app-prod/ChatGPT-darwin-arm64-"] }
+]
+package_kinds = ["zip"]
+macos_application_name = "ChatGPT.app"
+minimum_macos_version = "14.0"

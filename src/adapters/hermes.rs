@@ -1,20 +1,34 @@
 use regex::Regex;
 use url::Url;
 
-use crate::core::{Architecture, PackageKind, ProductId, ReleaseCandidate};
+use crate::core::{Architecture, OperatingSystem, PackageKind, ProductId, ReleaseCandidate};
 
 use super::AdapterError;
 
 pub fn parse_hermes_homepage(
     source: &str,
+    os: OperatingSystem,
     architecture: Architecture,
 ) -> Result<ReleaseCandidate, AdapterError> {
     let version_regex =
         Regex::new(r"(?i)Hermes(?:\s+Agent)?\s+v?(\d+\.\d+\.\d+)").expect("static version regex");
-    let url_regex = Regex::new(
-        r#"https://hermes-assets\.nousresearch\.com/Hermes-Setup\.exe(?:\?[^\"'<>\s]+)?"#,
-    )
-    .expect("static URL regex");
+    let (package_kind, url_regex) = match os {
+        OperatingSystem::Windows => (
+            PackageKind::Exe,
+            Regex::new(
+                r#"https://hermes-assets\.nousresearch\.com/Hermes-Setup\.exe(?:\?[^\"'<>\s]+)?"#,
+            )
+            .expect("static Windows URL regex"),
+        ),
+        OperatingSystem::MacOs if architecture == Architecture::Arm64 => (
+            PackageKind::Dmg,
+            Regex::new(
+                r#"https://hermes-assets\.nousresearch\.com/Hermes-Setup\.dmg(?:\?[^\"'<>\s]+)?"#,
+            )
+            .expect("static macOS URL regex"),
+        ),
+        _ => return Err(AdapterError::NoMatchingArtifact),
+    };
     let version = version_regex
         .captures(source)
         .and_then(|captures| captures.get(1))
@@ -23,13 +37,13 @@ pub fn parse_hermes_homepage(
     let url = url_regex
         .find(source)
         .map(|value| value.as_str())
-        .ok_or_else(|| AdapterError::Contract("Hermes Windows asset link not found".into()))?;
+        .ok_or_else(|| AdapterError::Contract("Hermes platform asset link not found".into()))?;
 
     Ok(ReleaseCandidate {
         product: ProductId::Hermes,
         version,
         architecture,
-        package_kind: PackageKind::Exe,
+        package_kind,
         download_url: Url::parse(url)?,
         expected_sha256: None,
         detached_signature: None,

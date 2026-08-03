@@ -1,6 +1,6 @@
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -93,8 +93,7 @@ pub fn sha256_file(path: &Path) -> Result<String, SecurityError> {
 }
 
 pub fn inspect_staged_file(root: &Path, path: &Path) -> Result<StableFileIdentity, SecurityError> {
-    reject_links(root)?;
-    reject_links(path)?;
+    reject_links_within_root(root, path)?;
 
     let canonical_root = fs::canonicalize(root)?;
     let canonical_path = fs::canonicalize(path)?;
@@ -131,27 +130,41 @@ pub fn verify_staged_identity(
     Ok(current)
 }
 
-fn reject_links(path: &Path) -> Result<(), SecurityError> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        current.push(component.as_os_str());
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(SecurityError::ReparsePoint(current));
+fn reject_links_within_root(root: &Path, path: &Path) -> Result<(), SecurityError> {
+    reject_link(root)?;
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| SecurityError::EscapedRoot)?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        match component {
+            Component::Normal(name) => current.push(name),
+            Component::CurDir => continue,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(SecurityError::EscapedRoot);
             }
-            Ok(metadata) => {
-                #[cfg(windows)]
-                {
-                    use std::os::windows::fs::MetadataExt;
-                    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-                    if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                        return Err(SecurityError::ReparsePoint(current));
-                    }
-                }
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
         }
+        reject_link(&current)?;
     }
     Ok(())
+}
+
+fn reject_link(path: &Path) -> Result<(), SecurityError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(SecurityError::ReparsePoint(path.to_path_buf()))
+        }
+        Ok(_metadata) => {
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+                if _metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                    return Err(SecurityError::ReparsePoint(path.to_path_buf()));
+                }
+            }
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
 }

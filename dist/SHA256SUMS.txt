@@ -1,1 +1,1 @@
-3b0fe7ab32b87cb83465a8765cd2f5737f9b307cc632341446ecef7cf1a9076e  AI-Client-Installer-windows-x64.exe
+d7f7e6e3fac236ec67d0600a19f1f5cd014b42c9f746c61a394e1cabe9afde17  AI-Client-Installer-windows-x64.exe

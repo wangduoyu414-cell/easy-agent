@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Codex</title>
+    <item>
+      <title>26.727.51351</title>
+      <sparkle:version>6119</sparkle:version>
+      <sparkle:shortVersionString>26.727.51351</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-x64-26.727.51351.zip" length="548904195" type="application/octet-stream" sparkle:edSignature="GrRLwV5k6XXH/gSjUG/eC81wSn76ij2HYjlkc96/PEbAg8rZiOZWnKyqSarO6hhyb9HzTIyb/aVRAgW4QO7vCg==" />
+    </item>
+  </channel>
+</rss>

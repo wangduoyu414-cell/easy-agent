@@ -4,12 +4,20 @@
   "pub_date": "2026-07-31T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "trusted fixture signature",
+      "signature": "dHJ1c3RlZCBmaXh0dXJlIHNpZ25hdHVyZQ==",
       "url": "https://github.com/farion1231/cc-switch/releases/download/v3.19.0/CC-Switch-v3.19.0-Windows.msi"
     },
     "windows-aarch64": {
-      "signature": "trusted fixture signature arm64",
+      "signature": "dHJ1c3RlZCBmaXh0dXJlIHNpZ25hdHVyZSBhcm02NA==",
       "url": "https://github.com/farion1231/cc-switch/releases/download/v3.19.0/CC-Switch-v3.19.0-Windows-arm64.msi"
+    },
+    "darwin-x86_64": {
+      "signature": "dHJ1c3RlZCBmaXh0dXJlIHNpZ25hdHVyZSBtYWNvcw==",
+      "url": "https://dl.ccswitch.io/v3.19.0/CC-Switch-v3.19.0-macOS.tar.gz"
+    },
+    "darwin-aarch64": {
+      "signature": "dHJ1c3RlZCBmaXh0dXJlIHNpZ25hdHVyZSBtYWNvcw==",
+      "url": "https://dl.ccswitch.io/v3.19.0/CC-Switch-v3.19.0-macOS.tar.gz"
     }
   }
 }

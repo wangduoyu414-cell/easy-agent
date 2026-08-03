@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use url::Url;
 
-use crate::core::{Architecture, PackageKind, ProductId, ReleaseCandidate};
+use crate::core::{Architecture, OperatingSystem, PackageKind, ProductId, ReleaseCandidate};
 
 use super::AdapterError;
 
@@ -29,6 +29,7 @@ struct WorkBuddyRelease {
 
 pub fn parse_workbuddy_update(
     source: &str,
+    os: OperatingSystem,
     architecture: Architecture,
 ) -> Result<ReleaseCandidate, AdapterError> {
     let envelope: WorkBuddyEnvelope = serde_json::from_str(source)?;
@@ -38,12 +39,29 @@ pub fn parse_workbuddy_update(
             "missing version or download URL".into(),
         ));
     }
+    let package_kind = match os {
+        OperatingSystem::Windows => PackageKind::Exe,
+        OperatingSystem::MacOs => PackageKind::Zip,
+        OperatingSystem::Unsupported => return Err(AdapterError::NoMatchingArtifact),
+    };
+    let download_url = Url::parse(&release.url)?;
+    let expected_suffix = format!(".{}", package_kind.extension());
+    if !download_url
+        .path()
+        .to_ascii_lowercase()
+        .ends_with(&expected_suffix)
+    {
+        return Err(AdapterError::Contract(format!(
+            "WorkBuddy artifact is not a {}",
+            package_kind.extension()
+        )));
+    }
     Ok(ReleaseCandidate {
         product: ProductId::WorkBuddy,
         version: release.version,
         architecture,
-        package_kind: PackageKind::Exe,
-        download_url: Url::parse(&release.url)?,
+        package_kind,
+        download_url,
         expected_sha256: [release.sha256, release.sha256hash, release.hash]
             .into_iter()
             .flatten()

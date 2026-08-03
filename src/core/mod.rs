@@ -1,6 +1,7 @@
 mod download;
 mod http;
 mod model;
+mod operation_log;
 mod orchestrator;
 mod security;
 mod trust;
@@ -14,15 +15,20 @@ pub use http::{
     HttpError, fetch_official_bytes, fetch_official_text, resolve_official_url, safe_http_client,
 };
 pub use model::{
-    Architecture, Detection, OperatingSystem, OperationState, OperationUpdate, PackageKind,
-    PlatformInfo, ProductId, ProductOperationResult, ProductView, ReleaseCandidate, SupportState,
+    Architecture, Detection, InstallPlan, MicrosoftStorePlan, OperatingSystem, OperationState,
+    OperationUpdate, PackageKind, PlatformInfo, ProductId, ProductOperationResult, ProductView,
+    ReleaseCandidate, SupportState,
 };
+pub use operation_log::OperationLog;
 pub use orchestrator::{
-    PreinstallDecision, assess_existing_install, run_install_batch, version_is_older,
+    PreinstallDecision, assess_existing_install, assess_existing_install_for_product,
+    run_install_batch, version_is_older, version_is_older_for_product,
 };
 pub use security::{
     SecurityError, StableFileIdentity, ensure_allowed_url, inspect_staged_file, sha256_file,
     validate_staged_file_name, verify_staged_identity,
 };
-pub use trust::{TrustEntry, TrustRegistry, TrustRegistryError, UrlRule};
+pub use trust::{
+    DistributionKind, TrustEntry, TrustRegistry, TrustRegistryError, UrlRule, WindowsPeMachine,
+};
 pub use verification::{VerificationError, verify_minisign_file};

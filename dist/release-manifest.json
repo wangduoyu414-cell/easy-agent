@@ -2,12 +2,12 @@
   "schema_version": 1,
   "version": "0.1.0",
   "status": "validation_pending",
-  "generated_at_utc": "2026-07-31T23:33:29.3907271Z",
+  "generated_at_utc": "2026-08-02T22:39:09.8219367Z",
   "artifacts": [
     {
       "name": "AI-Client-Installer-windows-x64.exe",
-      "bytes": 9532928,
-      "sha256": "3b0fe7ab32b87cb83465a8765cd2f5737f9b307cc632341446ecef7cf1a9076e",
+      "bytes": 10597888,
+      "sha256": "d7f7e6e3fac236ec67d0600a19f1f5cd014b42c9f746c61a394e1cabe9afde17",
       "signed": false
     }
   ],

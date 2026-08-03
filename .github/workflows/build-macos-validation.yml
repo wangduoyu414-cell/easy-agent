@@ -1,0 +1,51 @@
+name: Build macOS Universal validation DMG
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache Rust build inputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-universal-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build ad-hoc signed Universal DMG
+        env:
+          ALLOW_UNSIGNED_MACOS_BUILD: "1"
+        run: bash ./packaging/build-macos.sh
+
+      - name: Record architecture and signatures
+        run: |
+          lipo -info "dist/AI Client Installer.app/Contents/MacOS/ai-client-installer"
+          codesign --verify --deep --strict --verbose=2 "dist/AI Client Installer.app"
+          codesign --verify --verbose=2 "dist/AI-Client-Installer-macos-universal.dmg"
+          shasum -a 256 "dist/AI-Client-Installer-macos-universal.dmg"
+
+      - name: Upload validation DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: AI-Client-Installer-macos-universal-validation
+          path: |
+            dist/AI-Client-Installer-macos-universal.dmg
+            dist/SHA256SUMS-macos-universal.txt
+          if-no-files-found: error
+          retention-days: 7

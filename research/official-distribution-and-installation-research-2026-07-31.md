@@ -1,5 +1,9 @@
 # 五款 AI 客户端官方分发与安装调研
 
+> 2026-08-02 更新：本文的 ChatGPT Windows Store/目录推断已被新的官方客户端证据替代。当前实现使用 OpenAI 生产更新清单 `persistent.oaistatic.com/codex-app-prod/windows-store-update.json`，由本地代码构造对应架构完整 MSIX 并执行本地 AppX 部署；不依赖 Store、WinGet 或引导器。当前合同与 proof 见 `tasks/AI-CLIENT-INSTALLER-CHATGPT-DIRECT.md` 和 `evidence/chatgpt-direct-msix-proof-2026-08-02.md`。本文其余 2026-07-31 调研内容保留为历史依据。
+
+> 2026-08-03 macOS 更新：安装助手确定为一个 Universal DMG，内部同时包含 `x86_64` 与 `arm64`，运行时按物理硬件选择厂商包。WorkBuddy 采用各架构官方 ZIP+摘要；CC Switch 采用官方 minisign Universal tar.gz；Claude 采用官方 Universal DMG；ChatGPT 采用 OpenAI 官方 Intel/Apple Silicon appcast ZIP，并按 OpenAI 当前文档执行 macOS 14 下限；Hermes 官方明确不支持 Intel Mac。Mac 执行核心已实现，但所有可安装条目仍因 Developer Team ID/真机 Gatekeeper 与安装复检缺口保持 disabled。
+
 调研日期：2026-07-31
 适用目标：Windows 10/11 x64、Windows 10/11 ARM64、macOS 12+ Intel/Apple Silicon
 调研性质：任务设计证据；版本、文件大小和短期 CDN 地址均为当日快照，不是应写死的产品常量。
