@@ -347,18 +347,24 @@ impl eframe::App for InstallerApp {
                 |ui| {
                     ui.add_space(28.0);
                     ui.vertical_centered(|ui| {
-                        ui.label(
-                            RichText::new("客户端下载")
-                                .size(34.0)
-                                .strong()
-                                .color(Color32::from_rgb(18, 22, 29)),
-                        );
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new("选择需要安装的客户端")
-                                .size(16.0)
-                                .color(Color32::from_rgb(154, 158, 166)),
-                        );
+                        ui.horizontal(|ui| {
+                            draw_brand_icon(ui, 42.0);
+                            ui.add_space(10.0);
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new("easy agent")
+                                        .size(30.0)
+                                        .strong()
+                                        .color(Color32::from_rgb(18, 22, 29)),
+                                );
+                                ui.add_space(3.0);
+                                ui.label(
+                                    RichText::new("安全地安装与更新 AI 客户端")
+                                        .size(15.0)
+                                        .color(Color32::from_rgb(154, 158, 166)),
+                                );
+                            });
+                        });
                     });
                     ui.add_space(28.0);
 
@@ -778,6 +784,16 @@ fn draw_product_icon(ui: &mut egui::Ui, product: ProductId) {
         egui::Image::new(source)
             .fit_to_exact_size(egui::vec2(44.0, 44.0))
             .maintain_aspect_ratio(true),
+    );
+}
+
+fn draw_brand_icon(ui: &mut egui::Ui, size: f32) {
+    ui.add(
+        egui::Image::new(egui::include_image!(
+            "../assets/branding/easy-agent-icon-512.png"
+        ))
+        .fit_to_exact_size(egui::vec2(size, size))
+        .maintain_aspect_ratio(true),
     );
 }
 

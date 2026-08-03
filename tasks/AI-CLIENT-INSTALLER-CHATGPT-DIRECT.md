@@ -163,7 +163,7 @@ blocked_by: []
   - `config/trust-registry.toml`
   - `tests/fixtures/chatgpt/`、resolver/security/UI 测试
   - `docs/implementation-status.md`、`docs/maintenance.md`、`evidence/`
-  - `dist/AI-Client-Installer-windows-x64.exe` 与校验/manifest（仅未签名测试构建）
+  - `dist/easy-agent-windows-x64.exe` 与校验/manifest（仅未签名测试构建）
 - `documentation_impact`: updated；说明 OpenAI 官方清单、完整 MSIX 直装、版本变化维护、失败关闭边界和真机验证状态，并删除运行时依赖 Store/WinGet 的表述。
 - `repository_hygiene_requirement`: 不提交 OpenAI 包、临时下载、用户日志、短期版本化包 URL、凭据或父仓库修改。
 - `external_review`: policy=optional；当官方合同绑定、MSIX 信任边界、AppX 执行参数或 Store 路径可达性影响安全 Go/No-Go 时触发独立安全复核。

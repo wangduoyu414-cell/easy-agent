@@ -81,7 +81,7 @@ fn default_log_directory() -> io::Result<PathBuf> {
 fn platform_log_directory() -> io::Result<PathBuf> {
     env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
-        .map(|path| path.join("AI Client Installer").join("logs"))
+        .map(|path| path.join("easy agent").join("logs"))
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "LOCALAPPDATA is unavailable"))
 }
 
@@ -89,11 +89,7 @@ fn platform_log_directory() -> io::Result<PathBuf> {
 fn platform_log_directory() -> io::Result<PathBuf> {
     env::var_os("HOME")
         .map(PathBuf::from)
-        .map(|path| {
-            path.join("Library")
-                .join("Logs")
-                .join("AI Client Installer")
-        })
+        .map(|path| path.join("Library").join("Logs").join("easy agent"))
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is unavailable"))
 }
 
@@ -106,7 +102,7 @@ fn platform_log_directory() -> io::Result<PathBuf> {
                 .map(PathBuf::from)
                 .map(|path| path.join(".local").join("state"))
         })
-        .map(|path| path.join("ai-client-installer").join("logs"))
+        .map(|path| path.join("easy-agent").join("logs"))
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "state directory is unavailable"))
 }
 

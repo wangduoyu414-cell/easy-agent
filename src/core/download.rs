@@ -72,9 +72,7 @@ pub fn download_to_private_staging_controlled(
     validate_staged_file_name(&request.file_name)?;
     ensure_allowed_url(&request.url, request.trust)?;
     let client = safe_http_client()?;
-    let private_root = tempfile::Builder::new()
-        .prefix("ai-client-installer-")
-        .tempdir()?;
+    let private_root = tempfile::Builder::new().prefix("easy-agent-").tempdir()?;
     let part_path = private_root
         .path()
         .join(format!("{}.part", request.file_name));

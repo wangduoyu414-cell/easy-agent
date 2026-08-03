@@ -35,7 +35,7 @@ const MAX_INNER_APPX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const AUTHENTICODE_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
-$signature = Get-AuthenticodeSignature -LiteralPath $env:AI_CLIENT_INSTALLER_ARTIFACT
+$signature = Get-AuthenticodeSignature -LiteralPath $env:EASY_AGENT_ARTIFACT
 [pscustomobject]@{
   status = [string]$signature.Status
   signer_subject = if ($signature.SignerCertificate) { [string]$signature.SignerCertificate.Subject } else { $null }
@@ -46,11 +46,11 @@ const ADD_APPX_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Appx -ErrorAction Stop
 $dependencies = @()
-if ($env:AI_CLIENT_INSTALLER_DEPENDENCIES_JSON) {
-  $dependencies = @($env:AI_CLIENT_INSTALLER_DEPENDENCIES_JSON | ConvertFrom-Json)
+if ($env:EASY_AGENT_DEPENDENCIES_JSON) {
+  $dependencies = @($env:EASY_AGENT_DEPENDENCIES_JSON | ConvertFrom-Json)
 }
 $parameters = @{
-  Path = $env:AI_CLIENT_INSTALLER_MAIN_PACKAGE
+  Path = $env:EASY_AGENT_MAIN_PACKAGE
   ForceTargetApplicationShutdown = $true
   ErrorAction = 'Stop'
 }
@@ -58,15 +58,15 @@ if ($dependencies.Count -gt 0) {
   $parameters.DependencyPath = [string[]]$dependencies
 }
 Add-AppxPackage @parameters
-if ($env:AI_CLIENT_INSTALLER_REGISTER_FAMILY) {
-  Add-AppxPackage -RegisterByFamilyName -MainPackage $env:AI_CLIENT_INSTALLER_REGISTER_FAMILY -ErrorAction Stop
+if ($env:EASY_AGENT_REGISTER_FAMILY) {
+  Add-AppxPackage -RegisterByFamilyName -MainPackage $env:EASY_AGENT_REGISTER_FAMILY -ErrorAction Stop
 }
 "#;
 
 const DETECT_APPX_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Appx -ErrorAction Stop
-$family = $env:AI_CLIENT_INSTALLER_PACKAGE_FAMILY
+$family = $env:EASY_AGENT_PACKAGE_FAMILY
 $pkg = Get-AppxPackage -ErrorAction SilentlyContinue |
   Where-Object { $_.PackageFamilyName -eq $family } |
   Sort-Object Version -Descending |
@@ -101,7 +101,7 @@ if ($pkg) {
 const LOCATE_WINGET_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Appx -ErrorAction Stop
-$family = $env:AI_CLIENT_INSTALLER_APP_INSTALLER_FAMILY
+$family = $env:EASY_AGENT_APP_INSTALLER_FAMILY
 $pkg = Get-AppxPackage -ErrorAction SilentlyContinue |
   Where-Object { $_.PackageFamilyName -eq $family } |
   Sort-Object Version -Descending |
@@ -635,7 +635,7 @@ impl WindowsStoreBackend<'_> {
             "Store 主路径发生允许兜底的传输失败；正在下载一次完整 AppX 闭包",
         );
         let staging = tempfile::Builder::new()
-            .prefix("ai-client-installer-store-")
+            .prefix("easy-agent-store-")
             .tempdir()
             .map_err(|error| StoreFailure::hard(format!("无法创建 Store 私有暂存目录：{error}")))?;
         let winget = locate_winget_path(&self.config)?.ok_or_else(|| {
@@ -975,7 +975,7 @@ fn locate_winget_path(config: &StoreRuntimeConfig) -> Result<Option<PathBuf>, St
             encode_powershell(LOCATE_WINGET_SCRIPT),
         ],
         environment: vec![(
-            "AI_CLIENT_INSTALLER_APP_INSTALLER_FAMILY".into(),
+            "EASY_AGENT_APP_INSTALLER_FAMILY".into(),
             config.app_installer_family.clone(),
         )],
     };
@@ -1157,11 +1157,11 @@ fn plan_add_appx_command(
     let dependencies = serde_json::to_string(&dependencies)
         .map_err(|error| StoreFailure::hard(format!("无法编码 AppX 依赖参数：{error}")))?;
     let mut environment = vec![
-        ("AI_CLIENT_INSTALLER_MAIN_PACKAGE".into(), main),
-        ("AI_CLIENT_INSTALLER_DEPENDENCIES_JSON".into(), dependencies),
+        ("EASY_AGENT_MAIN_PACKAGE".into(), main),
+        ("EASY_AGENT_DEPENDENCIES_JSON".into(), dependencies),
     ];
     if let Some(family) = register_family {
-        environment.push(("AI_CLIENT_INSTALLER_REGISTER_FAMILY".into(), family.into()));
+        environment.push(("EASY_AGENT_REGISTER_FAMILY".into(), family.into()));
     }
     Ok(PlannedCommand {
         program: super::windows::trusted_powershell_program().map_err(StoreFailure::hard)?,
@@ -1582,7 +1582,7 @@ fn verify_authenticode_subject(
             encode_powershell(AUTHENTICODE_SCRIPT),
         ],
         environment: vec![(
-            "AI_CLIENT_INSTALLER_ARTIFACT".into(),
+            "EASY_AGENT_ARTIFACT".into(),
             path.to_str()
                 .ok_or_else(|| StoreFailure::hard("AppX 路径不是有效 Unicode"))?
                 .into(),
@@ -1633,7 +1633,7 @@ fn extract_dependency_archive(
     let mut archive = ZipArchive::new(file)
         .map_err(|error| StoreFailure::hard(format!("dependencies ZIP 无效：{error}")))?;
     let root = tempfile::Builder::new()
-        .prefix("ai-client-installer-winget-deps-")
+        .prefix("easy-agent-winget-deps-")
         .tempdir()
         .map_err(|error| StoreFailure::hard(format!("无法创建依赖暂存目录：{error}")))?;
     let prefix = format!("{}/", winget_architecture(architecture));
@@ -1953,7 +1953,7 @@ fn detect_appx_family(family: &str) -> Result<Detection, StoreFailure> {
             "-EncodedCommand".into(),
             encode_powershell(DETECT_APPX_SCRIPT),
         ],
-        environment: vec![("AI_CLIENT_INSTALLER_PACKAGE_FAMILY".into(), family.into())],
+        environment: vec![("EASY_AGENT_PACKAGE_FAMILY".into(), family.into())],
     };
     let outcome = run_command(&plan, Duration::from_secs(60), None, false)
         .map_err(map_cancellable_command_error)?;
@@ -2423,8 +2423,8 @@ mod tests {
     #[test]
     #[ignore = "requires the current official App Installer assets in a local proof directory"]
     fn current_official_app_installer_artifacts_match_embedded_trust() {
-        let proof_root = std::env::var("AI_CLIENT_INSTALLER_WINGET_PROOF_ROOT")
-            .expect("AI_CLIENT_INSTALLER_WINGET_PROOF_ROOT");
+        let proof_root =
+            std::env::var("EASY_AGENT_WINGET_PROOF_ROOT").expect("EASY_AGENT_WINGET_PROOF_ROOT");
         let registry = TrustRegistry::embedded().unwrap();
         let trust = registry
             .find(

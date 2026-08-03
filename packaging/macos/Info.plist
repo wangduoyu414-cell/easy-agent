@@ -5,15 +5,17 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>zh_CN</string>
   <key>CFBundleDisplayName</key>
-  <string>AI Client Installer</string>
+  <string>easy agent</string>
   <key>CFBundleExecutable</key>
-  <string>ai-client-installer</string>
+  <string>easy-agent</string>
   <key>CFBundleIdentifier</key>
-  <string>local.aiclientinstaller.app</string>
+  <string>io.github.wangduoyu414-cell.easy-agent</string>
+  <key>CFBundleIconFile</key>
+  <string>easy-agent.icns</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>AI Client Installer</string>
+  <string>easy agent</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

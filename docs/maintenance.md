@@ -25,7 +25,7 @@
 - Windows EXE bootstrap：目标设备架构与安装器外壳 PE machine 是不同信任事实。默认两者必须一致；只有本地 trust entry 可固定不同的 `windows_exe_machine`，且跨架构 bootstrap 必须同时固定单文件名 `postinstall_executable`。不得在 verifier、orchestrator 或 adapter 中全局允许 x86 EXE 运行于 x64 目标。
 - WorkBuddy 更新包：当前 Windows x64 官方通道固定为 x86 NSIS bootstrap，安装后固定检查 `WorkBuddy.exe`。若 bootstrap machine、最终主程序文件名、Signer、ProductName 或注册项路径形态变化，必须重新取得官方包只读 proof、更新测试并完成干净机更新验证，不能静默兼容。
 - 直接包 postcheck：安装器退出 0 后允许注册表/AppX 状态短暂延迟，当前上限约 90 秒。错误身份或架构立即失败；未登记、版本未知、最终主程序尚未出现或仍为旧版本只在时间窗内重试，超时必须是 `ResultUnknown`。已存在但不是可解析目标架构 PE 的固定主程序属于确定性失败，不得伪造成功。
-- 操作日志：Windows 默认位置为 `%LOCALAPPDATA%\AI Client Installer\logs\operations.jsonl`。只记录状态变化/终态，重复下载进度不落盘；完整 URL、用户目录和临时目录必须脱敏；1 MiB 时只保留一个 previous 文件。日志写入失败不能改变安装结果，但必须回到批次摘要。
+- 操作日志：Windows 默认位置为 `%LOCALAPPDATA%\easy agent\logs\operations.jsonl`。只记录状态变化/终态，重复下载进度不落盘；完整 URL、用户目录和临时目录必须脱敏；1 MiB 时只保留一个 previous 文件。日志写入失败不能改变安装结果，但必须回到批次摘要。
 - ChatGPT AppX 部署：只执行官方清单对应架构的单个完整 MSIX。包内版本必须与清单候选完全一致，安装前拒绝降级；`Add-AppxPackage` 退出 0 后仍必须通过固定 Package Family/Identity/Publisher/架构/版本 postcheck。未取得专门证据前不要启用 `ForceUpdateFromAnyVersion`。
 - macOS 架构：安装助手自身是 Universal，但下游包选择必须使用物理硬件判断，不能直接用当前进程 slice；Apple Silicon 即使在 Rosetta 下启动也应选择 ARM64 包。Hermes Intel 必须保持 unsupported。
 - macOS 包合同：WorkBuddy 使用更新接口的架构 ZIP 与 SHA-256；CC Switch 使用 `latest.json` 的 minisign tar.gz；Claude 使用 Universal DMG 稳定重定向；ChatGPT 分别读取 `appcast.xml` 和 `appcast-x64.xml`，只接受与 appcast 架构/版本一致的完整 ZIP。不得退回网页猜链接或第三方镜像。
@@ -59,6 +59,33 @@ macOS 条目还必须同时具备：
 
 证据完成后才把对应条目的 `enabled` 改为 `true`。不得提供用户侧“跳过验证”开关。
 
+## macOS 制品只读取证
+
+在真实 Mac 上取得官方包后，可用开发示例复用生产验证链读取 Bundle、Team ID、版本和架构；该示例会执行归档边界、updater 签名、codesign 与 Gatekeeper 检查，但不会复制或启动目标应用，也不会进入最终 DMG：
+
+```bash
+MACOS_PROOF_SIGNATURE="$(jq -r '.platforms[\"darwin-x86_64\"].signature' /private/tmp/latest.json | openssl base64 -d -A)" \
+cargo run --example macos_artifact_proof -- \
+  cc_switch x64 /private/tmp/CC-Switch-macOS.tar.gz
+```
+
+尚未写入注册表的应用名、Bundle ID 或 Team ID 只能作为本次证据的显式预期值传入，不能由远端响应自动扩展：
+
+```bash
+MACOS_PROOF_APPLICATION_NAME='WorkBuddy.app' \
+MACOS_PROOF_BUNDLE_ID='com.workbuddy.workbuddy' \
+cargo run --example macos_artifact_proof -- \
+  workbuddy x64 /private/tmp/WorkBuddy.zip
+```
+
+探针成功只证明当前制品通过只读平台检查，不等价于首次安装、更新、回滚或双架构真机 Gate。第三方包必须留在仓库外的私有临时目录，并在证据记录完成后清理。
+
+同一示例也可以按嵌入式信任条目只读检查当前 Applications 中的精确安装：
+
+```bash
+cargo run --example macos_artifact_proof -- chatgpt x64 --installed
+```
+
 ## 发布
 
 Windows：
@@ -74,7 +101,7 @@ macOS：在具备 Xcode Command Line Tools、Developer ID Application 和 notary
 
 ```bash
 APPLE_SIGN_IDENTITY='Developer ID Application: ...' \
-APPLE_NOTARY_PROFILE='ai-client-installer' \
+APPLE_NOTARY_PROFILE='easy-agent-notary' \
 ./packaging/build-macos.sh
 ```
 

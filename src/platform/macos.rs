@@ -727,7 +727,7 @@ fn install_app_bundle(
         inspect_app_bundle(target, trust, expected_architecture)?;
     }
     let stage_root = Builder::new()
-        .prefix(".ai-client-installer-stage-")
+        .prefix(".easy-agent-stage-")
         .tempdir_in(parent)
         .map_err(|error| format!("cannot create installation staging directory: {error}"))?;
     let stage_app = stage_root.path().join(
@@ -756,7 +756,7 @@ fn activate_staged_app(
         .parent()
         .ok_or_else(|| "installation target has no parent".to_owned())?;
     let backup_root = Builder::new()
-        .prefix(".ai-client-installer-backup-")
+        .prefix(".easy-agent-backup-")
         .tempdir_in(parent)
         .map_err(|error| format!("cannot create installation backup directory: {error}"))?;
     let backup_app = backup_root.path().join(

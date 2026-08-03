@@ -27,7 +27,7 @@ const MAX_INSTALLER_ERROR_CHARS: usize = 4096;
 const DETECTION_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Appx -ErrorAction Stop
-$product = $env:AI_CLIENT_INSTALLER_PRODUCT
+$product = $env:EASY_AGENT_PRODUCT
 $tokens = switch ($product) {
   'workbuddy' { @('WorkBuddy') }
   'hermes' { @('Hermes', 'Hermes Agent') }
@@ -90,8 +90,8 @@ if (-not $appx) {
 const VERIFY_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Security -ErrorAction Stop
-$path = $env:AI_CLIENT_INSTALLER_ARTIFACT
-$kind = $env:AI_CLIENT_INSTALLER_PACKAGE_KIND
+$path = $env:EASY_AGENT_ARTIFACT
+$kind = $env:EASY_AGENT_PACKAGE_KIND
 $signature = Get-AuthenticodeSignature -LiteralPath $path
 $product = $null
 $version = $null
@@ -130,7 +130,7 @@ if ($kind -eq 'msi') {
 const INSTALL_MSIX_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 Import-Module Appx -ErrorAction Stop
-Add-AppxPackage -Path $env:AI_CLIENT_INSTALLER_ARTIFACT -ForceTargetApplicationShutdown -ErrorAction Stop
+Add-AppxPackage -Path $env:EASY_AGENT_ARTIFACT -ForceTargetApplicationShutdown -ErrorAction Stop
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -263,7 +263,7 @@ pub fn detect_product(
             "-EncodedCommand",
             &encoded,
         ])
-        .env("AI_CLIENT_INSTALLER_PRODUCT", product.key())
+        .env("EASY_AGENT_PRODUCT", product.key())
         .output()?;
     if !output.status.success() {
         return Err(io::Error::other(
@@ -617,8 +617,8 @@ pub fn verify_artifact(
             "-EncodedCommand",
             &encoded,
         ])
-        .env("AI_CLIENT_INSTALLER_ARTIFACT", path)
-        .env("AI_CLIENT_INSTALLER_PACKAGE_KIND", package_kind_key(kind))
+        .env("EASY_AGENT_ARTIFACT", path)
+        .env("EASY_AGENT_PACKAGE_KIND", package_kind_key(kind))
         .output()
         .map_err(|error| format!("cannot start Windows verifier: {error}"))?;
     if !output.status.success() {
@@ -745,7 +745,7 @@ pub fn plan_install_command(path: &Path, kind: PackageKind) -> Result<PlannedCom
                 "-EncodedCommand".into(),
                 encode_powershell(INSTALL_MSIX_SCRIPT),
             ],
-            environment: vec![("AI_CLIENT_INSTALLER_ARTIFACT".into(), literal_path)],
+            environment: vec![("EASY_AGENT_ARTIFACT".into(), literal_path)],
         }),
         _ => Err(format!("unsupported Windows package type: {kind:?}")),
     }
@@ -1373,11 +1373,11 @@ if ([NativeConsoleProbe]::GetConsoleWindow() -ne [IntPtr]::Zero) { exit 42 }
     }
 
     #[test]
-    #[ignore = "requires AI_CLIENT_INSTALLER_WORKBUDDY_PACKAGE to point to a current official package"]
+    #[ignore = "requires EASY_AGENT_WORKBUDDY_PACKAGE to point to a current official package"]
     fn current_official_workbuddy_bootstrap_matches_embedded_trust() {
-        let path = std::env::var_os("AI_CLIENT_INSTALLER_WORKBUDDY_PACKAGE")
+        let path = std::env::var_os("EASY_AGENT_WORKBUDDY_PACKAGE")
             .map(std::path::PathBuf::from)
-            .expect("AI_CLIENT_INSTALLER_WORKBUDDY_PACKAGE is required");
+            .expect("EASY_AGENT_WORKBUDDY_PACKAGE is required");
         let registry = TrustRegistry::embedded().unwrap();
         let trust = registry
             .find(

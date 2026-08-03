@@ -1,9 +1,9 @@
 [package]
-name = "ai-client-installer"
+name = "easy-agent"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Fail-closed installer assistant for five fixed AI desktop clients"
+description = "Fail-closed installer assistant for five fixed AI desktop clients on Windows and macOS"
 
 [dependencies]
 base64 = "0.22"
@@ -35,6 +35,9 @@ libc = "0.2"
 
 [dev-dependencies]
 httpmock = "0.8"
+
+[build-dependencies]
+winres = "0.1.12"
 
 [profile.release]
 codegen-units = 1

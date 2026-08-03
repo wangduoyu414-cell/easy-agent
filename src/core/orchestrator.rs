@@ -668,6 +668,33 @@ mod tests {
         }
     }
 
+    fn cc_switch_macos_candidate() -> ReleaseCandidate {
+        ReleaseCandidate {
+            product: ProductId::CcSwitch,
+            version: "3.19.1".into(),
+            architecture: Architecture::X64,
+            package_kind: PackageKind::TarGz,
+            download_url: Url::parse("https://dl.ccswitch.io/v3.19.1/CC-Switch-macOS.tar.gz")
+                .unwrap(),
+            expected_sha256: None,
+            detached_signature: Some("untrusted comment: fixture".into()),
+        }
+    }
+
+    fn cc_switch_macos_detection() -> Detection {
+        Detection {
+            installed: true,
+            version: Some("3.19.1".into()),
+            managed: false,
+            management_known: true,
+            package_identity: Some("com.ccswitch.desktop".into()),
+            package_family: None,
+            publisher: Some("R8UR22V2F9".into()),
+            architecture: Some(Architecture::X64),
+            evidence: "用户 Applications · 已通过 Bundle/签名/Gatekeeper 检查".into(),
+        }
+    }
+
     #[test]
     fn direct_postcheck_waits_for_the_target_version() {
         let candidate = workbuddy_candidate();
@@ -844,5 +871,91 @@ mod tests {
             error,
             InstallOneError::Failed(message) if message.contains("publisher")
         ));
+    }
+
+    #[test]
+    fn macos_postcheck_requires_exact_bundle_team_architecture_and_version() {
+        let candidate = cc_switch_macos_candidate();
+        let registry = TrustRegistry::embedded().unwrap();
+        let trust = registry
+            .find(
+                ProductId::CcSwitch,
+                OperatingSystem::MacOs,
+                Architecture::X64,
+            )
+            .unwrap();
+
+        let artifact = ArtifactVerification {
+            signer_subject: Some("R8UR22V2F9".into()),
+            product_identity: "com.ccswitch.desktop".into(),
+            version: Some(candidate.version.clone()),
+            architecture: Some(candidate.architecture),
+        };
+        verify_candidate_artifact_version(&candidate, &artifact).unwrap();
+
+        let result = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            cc_switch_macos_detection,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(result, "复检成功：3.19.1");
+
+        let mut wrong_bundle = cc_switch_macos_detection();
+        wrong_bundle.package_identity = Some("com.example.other".into());
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_bundle.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("Bundle ID")
+        ));
+
+        let mut wrong_team = cc_switch_macos_detection();
+        wrong_team.publisher = Some("UNEXPECTED".into());
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_team.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("Team ID")
+        ));
+
+        let mut wrong_architecture = cc_switch_macos_detection();
+        wrong_architecture.architecture = Some(Architecture::Arm64);
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_architecture.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("应用架构")
+        ));
+
+        let changed_artifact = ArtifactVerification {
+            version: Some("3.19.0".into()),
+            ..artifact
+        };
+        assert!(verify_candidate_artifact_version(&candidate, &changed_artifact).is_err());
     }
 }

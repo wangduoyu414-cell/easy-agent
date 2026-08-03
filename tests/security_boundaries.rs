@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
-use ai_client_installer::core::{
+use easy_agent::core::{
     Architecture, Detection, DistributionKind, InstallPlan, OperatingSystem, PackageKind,
     PlatformInfo, PreinstallDecision, ProductId, ReleaseCandidate, TrustRegistry, WindowsPeMachine,
     assess_existing_install, assess_existing_install_for_product, ensure_allowed_url,
@@ -17,7 +17,7 @@ use url::Url;
 use std::os::unix::fs::symlink;
 
 #[cfg(windows)]
-use ai_client_installer::platform::plan_install_command;
+use easy_agent::platform::plan_install_command;
 
 #[test]
 fn embedded_registry_enables_the_configured_windows_x64_strategies() {
@@ -111,7 +111,7 @@ fn embedded_registry_models_both_macos_architectures_fail_closed() {
     }
     assert!(matches!(
         registry.support_state(ProductId::Hermes, OperatingSystem::MacOs, Architecture::X64),
-        ai_client_installer::core::SupportState::Unsupported(_)
+        easy_agent::core::SupportState::Unsupported(_)
     ));
     let chatgpt = registry
         .find(
@@ -121,6 +121,61 @@ fn embedded_registry_models_both_macos_architectures_fail_closed() {
         )
         .unwrap();
     assert_eq!(chatgpt.minimum_macos_version.as_deref(), Some("14.0"));
+    for architecture in [Architecture::X64, Architecture::Arm64] {
+        let cc_switch = registry
+            .find(ProductId::CcSwitch, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            cc_switch.macos_bundle_id.as_deref(),
+            Some("com.ccswitch.desktop")
+        );
+        assert_eq!(cc_switch.macos_team_id.as_deref(), Some("R8UR22V2F9"));
+
+        let workbuddy = registry
+            .find(ProductId::WorkBuddy, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            workbuddy.macos_application_name.as_deref(),
+            Some("WorkBuddy.app")
+        );
+        assert_eq!(
+            workbuddy.macos_bundle_id.as_deref(),
+            Some("com.workbuddy.workbuddy")
+        );
+        assert_eq!(workbuddy.macos_team_id.as_deref(), Some("FN2V63AD2J"));
+
+        let chatgpt = registry
+            .find(ProductId::ChatGpt, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            chatgpt.macos_application_name.as_deref(),
+            Some("ChatGPT.app")
+        );
+        assert_eq!(chatgpt.macos_bundle_id.as_deref(), Some("com.openai.codex"));
+        assert_eq!(chatgpt.macos_team_id.as_deref(), Some("2DC432GLL2"));
+
+        let claude = registry
+            .find(ProductId::Claude, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            claude.macos_bundle_id.as_deref(),
+            Some("com.anthropic.claudefordesktop")
+        );
+        assert_eq!(claude.macos_team_id.as_deref(), Some("Q6L2SF6YDW"));
+    }
+    let hermes = registry
+        .find(
+            ProductId::Hermes,
+            OperatingSystem::MacOs,
+            Architecture::Arm64,
+        )
+        .unwrap();
+    assert_eq!(hermes.macos_application_name.as_deref(), Some("Hermes.app"));
+    assert_eq!(
+        hermes.macos_bundle_id.as_deref(),
+        Some("com.nousresearch.hermes.setup")
+    );
+    assert_eq!(hermes.macos_team_id.as_deref(), Some("T2F6S8MF7C"));
 }
 
 #[test]
@@ -172,7 +227,7 @@ minimum_macos_version = "14.0"
     };
     assert!(matches!(
         registry.support_state_for_platform(ProductId::ChatGpt, &platform),
-        ai_client_installer::core::SupportState::Unsupported(_)
+        easy_agent::core::SupportState::Unsupported(_)
     ));
 }
 
@@ -356,7 +411,7 @@ fn installer_paths_are_passed_as_literal_process_arguments() {
     assert!(
         msix.environment
             .iter()
-            .any(|(key, value)| key == "AI_CLIENT_INSTALLER_ARTIFACT"
+            .any(|(key, value)| key == "EASY_AGENT_ARTIFACT"
                 && value == r"C:\Temp\client & calc.exe.msix")
     );
 }
@@ -523,16 +578,13 @@ package_kinds = ["msi"]
     assert!(
         results
             .iter()
-            .all(|result| result.state == ai_client_installer::core::OperationState::Failed)
+            .all(|result| result.state == easy_agent::core::OperationState::Failed)
     );
     let updates = updates.lock().unwrap();
     assert_eq!(updates.len(), 4);
     for (updates, result) in updates.chunks_exact(2).zip(&results) {
         assert_eq!(updates[0].product, result.product);
-        assert_eq!(
-            updates[0].state,
-            ai_client_installer::core::OperationState::Ready
-        );
+        assert_eq!(updates[0].state, easy_agent::core::OperationState::Ready);
         assert_eq!(updates[1].product, result.product);
         assert_eq!(updates[1].state, result.state);
     }

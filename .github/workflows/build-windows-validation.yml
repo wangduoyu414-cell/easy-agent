@@ -1,0 +1,49 @@
+name: Build easy agent Windows validation executables
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows ${{ matrix.architecture }}
+    runs-on: windows-2025
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+          components: rustfmt,clippy
+
+      - name: Cache Rust build inputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            target
+          key: windows-${{ matrix.architecture }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build and verify the portable executable
+        shell: pwsh
+        run: .\packaging\build-windows.ps1 -Architecture ${{ matrix.architecture }}
+
+      - name: Upload validation executable
+        uses: actions/upload-artifact@v6
+        with:
+          name: easy-agent-${{ matrix.architecture }}-validation
+          path: |
+            dist/easy-agent-windows-${{ matrix.architecture }}.exe
+            dist/SHA256SUMS-windows-${{ matrix.architecture }}.txt
+          if-no-files-found: error
+          retention-days: 7

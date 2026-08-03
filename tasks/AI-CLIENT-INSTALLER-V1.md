@@ -20,7 +20,7 @@ blocked_by: []
 - `readiness`: P0～P3（proof、实现、适配、总装）Ready；P4 正式发布只有在合法 Windows 代码签名证书与 Apple Developer ID/notarization 凭据到位后才可执行。缺凭据时可以完成实现和未签名测试构建，但整卡只能记录 `Implementation complete; validation pending`，不能宣称最终交付完成。
 - `authority_sources`: 用户在本任务中的需求与限制；[官方分发与安装调研](../research/official-distribution-and-installation-research-2026-07-31.md)；五款产品及操作系统厂商的官方分发文档；多代理从最小架构、安全/供应链、维护成本角度形成的共同结论。
 - `decision_owner`: 用户决定产品范围、品牌名称、是否接受某产品在特定平台“暂不支持”；执行者只能在本卡确认的五产品、官方源和交付边界内选择实现细节。
-- `material_unknowns`: `UNK-AIINST-001` ChatGPT Windows 官方清单 + 对应架构完整 MSIX 在 x64/ARM64 干净系统上的首次安装、旧版更新和无 Store/WinGet/引导器/登录窗口证明；`UNK-AIINST-002` WorkBuddy macOS 已选择官方分架构 ZIP+摘要，仍需最终应用名/Bundle/Team identity 与两类 Mac 安装复检；`UNK-AIINST-003` Hermes Intel Mac 已由厂商策略关闭为 unsupported，Apple Silicon DMG bootstrap 的最终桌面/runtime 行为仍需证明；`UNK-AIINST-004` 各可支持 macOS 应用的最终 Bundle/Team identity 与真机 Gatekeeper/安装矩阵。未关闭的产品/平台保持 disabled/unsupported 或 validation pending。
+- `material_unknowns`: `UNK-AIINST-001` ChatGPT Windows 官方清单 + 对应架构完整 MSIX 在 x64/ARM64 干净系统上的首次安装、旧版更新和无 Store/WinGet/引导器/登录窗口证明；`UNK-AIINST-002` WorkBuddy macOS 两架构应用名/Bundle/Team identity 已固定，但两条官方 API SHA-256 均与对应 CDN 完整 ZIP 不一致，两类 Mac 安装复检仍待关闭；`UNK-AIINST-003` Hermes Intel Mac 已由厂商策略关闭为 unsupported，Apple Silicon DMG bootstrap identity 已固定，最终桌面/runtime 行为仍需证明；`UNK-AIINST-004` Claude stable redirect challenge，以及 CC Switch、Claude、ChatGPT 和其他可支持 macOS 应用的 Intel/Apple Silicon 干净机安装、更新与 Gatekeeper 矩阵。未关闭的产品/平台保持 disabled/unsupported 或 validation pending。
 - `external_prerequisites`: P4 正式发布需要由发布主体提供可用的 Windows Authenticode 证书、Apple Developer ID Application 证书、notarization 凭据及安全的 CI secret 注入方式；这些凭据不属于代码实现产物，缺失会阻止最终完成但不阻止 P0～P3。
 
 # 2. 业务目标
@@ -102,9 +102,9 @@ blocked_by: []
 - `ASM-AIINST-001`: Rust + eframe/egui 能以足够小的责任面提供简单原生 UI 和无 WebView 便携 Windows EXE；由 `TASK-AIINST-FOUNDATION` 用实际产物证明。
 - `ASM-AIINST-002`: Cargo release build 加本地平台脚本可形成签名 Windows EXE 与 macOS Universal DMG；正式签名依赖用户/组织提供合法证书与密钥。
 - `current_execution_path`: UI → trust-registry → 产品 adapter → 私有下载/摘要或 updater 签名 → Windows AppX/MSI/EXE 或 macOS DMG/归档 verifier → 安装执行 → 身份/版本/架构 postcheck。
-- `current_behavior`: Windows x64 五产品执行基础已接通；macOS Universal 核心已实现并通过两个 Apple target 编译/Clippy，但可安装厂商条目仍因 Team ID 与真机 proof 保持 disabled，Hermes Intel 为 unsupported。
+- `current_behavior`: Windows x64 五产品执行基础已接通；macOS Universal 核心已实现并通过两个 Apple target 编译/Clippy。2026-08-04 Intel 只读取证已固定已观察应用身份与 Team ID，并修正 Hermes bootstrap Bundle ID；可安装厂商条目仍因 WorkBuddy 摘要不一致、Claude stable redirect challenge、Apple Silicon/干净机 proof 保持 disabled，Hermes Intel 为 unsupported。
 - `target_delta`: 在独立子项目中建立一个薄 UI、单一编排器、五个明确适配器、共享下载/验证与两个平台安装执行模块，完成真机可验证发布链。
-- `evidence_gaps`: 见 `UNK-AIINST-*`；还缺 Windows x64/ARM64、macOS Intel/Apple Silicon 的干净环境安装证据与自家制品签名证据。
+- `evidence_gaps`: 见 `UNK-AIINST-*`；还缺 Windows x64/ARM64、macOS Intel/Apple Silicon 的干净环境安装证据、WorkBuddy/Claude 合同闭环与自家制品正式签名证据。
 
 # 6. 范围与责任边界
 
@@ -153,16 +153,16 @@ blocked_by: []
 | 产品/平台 | 初始入口与允许 host | 包类型 | 固定产品身份 | 必须验证 | 初始启用状态 |
 |---|---|---|---|---|---|
 | WorkBuddy Windows x64 | `www.workbuddy.cn/v2/update`；`www.workbuddy.cn`、`download.codebuddy.cn` | EXE；当前官方 x86 NSIS bootstrap 面向 x64 产品 | Product=`WorkBuddy`；Signer=`Tencent Technology (Shenzhen) Company Limited`；postinstall executable=`WorkBuddy.exe` | HTTPS 链、最终 host、bootstrap PE machine=x86、Authenticode 有效且 signer 精确匹配；接口 hash 非空时再校验 hash；安装后 `WorkBuddy.exe` 必须为 x64 且版本达到目标 | enabled in validation build；Windows x64 clean update proof pending |
-| WorkBuddy macOS Intel/ARM64 | 同上两 host | 官方分架构 ZIP | Bundle ID + Team ID=`P0-pin` | 官方 SHA-256、app bundle/version/arch、codesign、Gatekeeper、quarantine 保留 | disabled until P0 pin |
+| WorkBuddy macOS Intel/ARM64 | 同上两 host | 官方分架构 ZIP | 应用名=`WorkBuddy.app`；Bundle ID=`com.workbuddy.workbuddy`；Team ID=`FN2V63AD2J` | 官方 SHA-256、app bundle/version/arch、codesign、Gatekeeper、quarantine 保留 | disabled：两架构 API SHA 与 CDN 完整 ZIP 不一致；clean install proof pending |
 | Hermes Windows x64/ARM64 | `hermes-agent.nousresearch.com`；`hermes-assets.nousresearch.com` | EXE bootstrap | Product=`Hermes`；Signer=`Nous Research Inc.` | HTTPS 链、host、PE、Authenticode/signer；bootstrap 与 runtime 状态分离 | disabled until both-arch P0 proof |
 | Hermes macOS Intel | 同上两 host | 无 | 厂商明确不支持 | 不下载、不尝试 Rosetta 兼容 | unsupported |
-| Hermes macOS Apple Silicon | 同上两 host | DMG bootstrap | Bundle ID=`com.nousresearch.hermes`；应用名/Team ID=`P0-pin` | DMG/app identity、codesign、Gatekeeper、quarantine；bootstrap 下游只披露不逐件背书 | disabled until P0 pin |
+| Hermes macOS Apple Silicon | 同上两 host | DMG bootstrap | 应用名=`Hermes.app`；Bundle ID=`com.nousresearch.hermes.setup`；Team ID=`T2F6S8MF7C` | DMG/app identity、codesign、Gatekeeper、quarantine；bootstrap 下游只披露不逐件背书 | disabled until bootstrap/install proof |
 | CC Switch Windows x64/ARM64 | `dl.ccswitch.io/latest.json`；官方 fallback `github.com/farion1231/cc-switch/releases/latest/download/latest.json`；允许 `dl.ccswitch.io`、`github.com`、`release-assets.githubusercontent.com`、`objects.githubusercontent.com` | MSI | Product=`CC Switch`；Updater pubkey=`dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK` | latest.json platform mapping、minisign/Tauri signature、MSI arch/identity；若有 Authenticode 同时记录 | enabled after clean proof |
-| CC Switch macOS Intel/ARM64 | 同上入口/host | 清单签名 tar.gz | Bundle ID=`com.ccswitch.desktop`；同一 updater pubkey；Team ID=`P0-pin` | minisign、archive bounds、bundle/version/arch、codesign、Gatekeeper、quarantine | disabled until P0 pin |
+| CC Switch macOS Intel/ARM64 | 同上入口/host | 清单签名 tar.gz | 应用名=`CC Switch.app`；Bundle ID=`com.ccswitch.desktop`；Team ID=`R8UR22V2F9`；同一 updater pubkey | minisign、archive bounds、bundle/version/arch、codesign、Gatekeeper、quarantine | disabled until Intel/Apple Silicon clean install proof |
 | Claude Windows x64/ARM64 | `claude.ai/api/desktop/win32/{arch}/msix/latest/redirect`；`claude.ai`、`downloads.claude.ai` | MSIX | Package Name=`Claude`；Package Family/Publisher=`P0-pin` | redirect host、MSIX manifest arch/version、AppX signature、精确 package identity | disabled until P0 pin |
-| Claude macOS Universal | `claude.ai/api/desktop/darwin/universal/dmg/latest/redirect`；`claude.ai`、`downloads.claude.ai` | DMG | Bundle ID=`com.anthropic.claudefordesktop`；Team ID=`P0-pin` | bundle/version/universal slices、codesign、Gatekeeper、quarantine | disabled until P0 pin |
+| Claude macOS Universal | `claude.ai/api/desktop/darwin/universal/dmg/latest/redirect`；`claude.ai`、`downloads.claude.ai` | DMG | 应用名=`Claude.app`；Bundle ID=`com.anthropic.claudefordesktop`；Team ID=`Q6L2SF6YDW` | bundle/version/universal slices、codesign、Gatekeeper、quarantine | disabled：stable redirect challenge；clean install proof pending |
 | ChatGPT Windows x64/ARM64 | `persistent.oaistatic.com/codex-app-prod/windows-store-update.json`；同 host 固定 `/codex-app-prod/releases/` 前缀 | 完整 MSIX | Identity=`OpenAI.Codex`；Package Family=`OpenAI.Codex_2p2nqsd0c76g0`；Publisher=`CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B` | schema/四段版本、固定文件名架构映射、AppX signature、identity/publisher/arch/包内版本、执行前二次绑定和 postcheck；禁止 Store/WinGet/引导器 | x64 enabled in validation build；ARM64 disabled until package/clean proof |
-| ChatGPT macOS Intel/ARM64 | `persistent.oaistatic.com/codex-app-prod/appcast-x64.xml` / `appcast.xml`；同 host 架构 ZIP 前缀 | 架构 ZIP | 新统一应用 Bundle ID + Team ID=`P0-pin`；Classic identity 单独记录 | appcast 版本/架构映射、bundle/version/arch、codesign、Gatekeeper、quarantine；官方支持下限 macOS 14；不得卸载 Classic | disabled until P0 pin |
+| ChatGPT macOS Intel/ARM64 | `persistent.oaistatic.com/codex-app-prod/appcast-x64.xml` / `appcast.xml`；同 host 架构 ZIP 前缀 | 架构 ZIP | 新统一应用名=`ChatGPT.app`；Bundle ID=`com.openai.codex`；Team ID=`2DC432GLL2`；Classic identity 单独记录 | appcast 版本/架构映射、bundle/version/arch、codesign、Gatekeeper、quarantine；官方支持下限 macOS 14；不得卸载 Classic | disabled until Intel/Apple Silicon clean install proof |
 
 运行时可变字段仅限 version、size、官方响应中的 URL/短期 token、digest/signature、release notes 和依赖版本。注册表加载失败、字段为空、adapter 试图使用未登记值时必须编译失败或运行时 fail closed。
 
@@ -501,9 +501,9 @@ blocked_by: []
   - `packaging/`
   - `docs/maintenance.md`
   - `evidence/`
-  - `dist/AI-Client-Installer-windows-x64.exe`
-  - `dist/AI-Client-Installer-windows-arm64.exe`
-  - `dist/AI-Client-Installer-macos-universal.dmg`
+  - `dist/easy-agent-windows-x64.exe`
+  - `dist/easy-agent-windows-arm64.exe`
+  - `dist/easy-agent-macos-universal.dmg`
   - `dist/SHA256SUMS.txt`
   - `dist/release-manifest.json`
 - `documentation_impact`: updated；实现时同步 README、支持矩阵、五适配器官方入口/稳定身份/变更手册、构建签名和用户故障说明。若某产品/平台 No-Go，必须在支持矩阵和 UI 文案中一致反映。
