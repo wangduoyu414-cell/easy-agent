@@ -8,9 +8,9 @@ use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichTex
 
 use crate::adapters::resolve_install_plan;
 use crate::core::{
-    Detection, InstallPlan, OperationLog, OperationUpdate, PlatformInfo, ProductId,
-    ProductOperationResult, ProductView, SupportState, TrustRegistry, run_install_batch,
-    version_is_older_for_product,
+    Architecture, Detection, InstallPlan, OperatingSystem, OperationLog, OperationState,
+    OperationUpdate, PackageKind, PlatformInfo, ProductId, ProductOperationResult, ProductView,
+    SupportState, TrustRegistry, run_install_batch, version_is_older_for_product,
 };
 use crate::platform::{current_platform, detect_product};
 
@@ -37,6 +37,12 @@ pub struct InstallerApp {
     cancel_flag: Arc<AtomicBool>,
     batch_summary: Option<String>,
     registry_error: Option<String>,
+    active_product: Option<ProductId>,
+    active_operation_state: Option<OperationState>,
+    download_progress: Option<f32>,
+    cancel_requested: bool,
+    close_confirmation_open: bool,
+    close_after_batch: bool,
 }
 
 impl InstallerApp {
@@ -81,6 +87,12 @@ impl InstallerApp {
             cancel_flag: Arc::new(AtomicBool::new(false)),
             batch_summary: None,
             registry_error,
+            active_product: None,
+            active_operation_state: None,
+            download_progress: None,
+            cancel_requested: false,
+            close_confirmation_open: false,
+            close_after_batch: false,
         };
         app.start_scan();
         app
@@ -125,6 +137,10 @@ impl InstallerApp {
             return false;
         }
         self.scanning = true;
+        self.active_product = None;
+        self.active_operation_state = None;
+        self.download_progress = None;
+        self.cancel_requested = false;
         for product in &mut self.products {
             product.result_unknown = false;
             product.status_line = "正在检测安装状态与官方版本…".into();
@@ -212,6 +228,13 @@ impl InstallerApp {
                 false
             }
             UiEvent::Operation(update) => {
+                self.active_product = Some(update.product);
+                self.active_operation_state = Some(update.state);
+                self.download_progress = if update.state == OperationState::Downloading {
+                    parse_download_progress(&update.message).or(self.download_progress)
+                } else {
+                    None
+                };
                 if let Some(view) = self
                     .products
                     .iter_mut()
@@ -228,6 +251,10 @@ impl InstallerApp {
                 log_warning,
             } => {
                 self.batch_running = false;
+                self.cancel_requested = false;
+                self.download_progress = None;
+                self.active_operation_state = results.last().map(|result| result.state);
+                self.close_confirmation_open = false;
                 let succeeded = results
                     .iter()
                     .filter(|result| result.state == crate::core::OperationState::Succeeded)
@@ -292,6 +319,10 @@ impl InstallerApp {
         self.cancel_flag.store(false, Ordering::Relaxed);
         self.batch_running = true;
         self.batch_summary = None;
+        self.active_product = plans.first().map(InstallPlan::product);
+        self.active_operation_state = Some(OperationState::Ready);
+        self.download_progress = None;
+        self.cancel_requested = false;
         let sender = self.event_sender.clone();
         let platform = self.platform.clone();
         let cancel = self.cancel_flag.clone();
@@ -319,20 +350,52 @@ impl InstallerApp {
             });
         });
     }
+
+    fn request_cancel(&mut self) {
+        if !self.batch_running
+            || self.cancel_requested
+            || !operation_can_cancel(self.active_operation_state)
+        {
+            return;
+        }
+        self.cancel_requested = true;
+        self.cancel_flag.store(true, Ordering::Relaxed);
+        if let Some(product) = self.active_product
+            && let Some(view) = self
+                .products
+                .iter_mut()
+                .find(|view| view.product == product)
+        {
+            view.status_line = "正在取消当前任务，请稍候…".into();
+        }
+    }
 }
 
 impl eframe::App for InstallerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.drain_events();
-        if self.scanning {
+        if self.close_after_batch && !self.batch_running {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+        if self.batch_running && ui.ctx().input(|input| input.viewport().close_requested()) {
             ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(100));
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.close_confirmation_open = true;
+        }
+        if self.scanning || self.batch_running {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(if self.batch_running {
+                    50
+                } else {
+                    100
+                }));
         }
 
         configure_visuals(ui.ctx());
         let panel = egui::Frame::central_panel(ui.style()).fill(Color32::WHITE);
         panel.show(ui, |ui| {
-            let content_width = 610.0_f32.min((ui.available_width() - 28.0).max(520.0));
+            let content_width = 650.0_f32.min((ui.available_width() - 32.0).max(560.0));
             let left = ui.max_rect().center().x - content_width / 2.0;
             let content_rect = egui::Rect::from_min_max(
                 egui::pos2(left, ui.max_rect().top()),
@@ -345,11 +408,11 @@ impl eframe::App for InstallerApp {
                     .max_rect(content_rect)
                     .layout(egui::Layout::top_down(egui::Align::Min)),
                 |ui| {
-                    ui.add_space(28.0);
+                    ui.add_space(24.0);
                     ui.vertical_centered(|ui| {
                         ui.horizontal(|ui| {
-                            draw_brand_icon(ui, 42.0);
-                            ui.add_space(10.0);
+                            draw_brand_icon(ui, 44.0);
+                            ui.add_space(12.0);
                             ui.vertical(|ui| {
                                 ui.label(
                                     RichText::new("easy agent")
@@ -359,22 +422,45 @@ impl eframe::App for InstallerApp {
                                 );
                                 ui.add_space(3.0);
                                 ui.label(
-                                    RichText::new("安全地安装与更新 AI 客户端")
+                                    RichText::new("安全安装与更新常用 AI 客户端")
                                         .size(15.0)
-                                        .color(Color32::from_rgb(154, 158, 166)),
+                                        .color(Color32::from_rgb(112, 117, 126)),
+                                );
+                                ui.add_space(3.0);
+                                ui.label(
+                                    RichText::new("官方来源 · 签名校验 · 更新失败自动回滚")
+                                        .size(12.0)
+                                        .color(Color32::from_rgb(90, 99, 112)),
                                 );
                             });
                         });
                     });
-                    ui.add_space(28.0);
+                    ui.add_space(20.0);
 
                     egui::ScrollArea::vertical()
-                        .max_height(401.0)
+                        .max_height(421.0)
                         .auto_shrink([false, false])
                         .show(ui, |ui| {
                             ui.spacing_mut().item_spacing.y = 0.0;
-                            for view in &self.products {
-                                if draw_product_row(ui, view, self.scanning, self.batch_running) {
+                            let mut ordered_products = self.products.iter().collect::<Vec<_>>();
+                            ordered_products
+                                .sort_by_key(|view| support_display_rank(&view.support));
+                            for view in ordered_products {
+                                let is_active = self.active_product == Some(view.product);
+                                let show_active_state = is_active && self.batch_running;
+                                if draw_product_row(
+                                    ui,
+                                    view,
+                                    self.scanning,
+                                    self.batch_running,
+                                    show_active_state
+                                        .then_some(self.active_operation_state)
+                                        .flatten(),
+                                    show_active_state
+                                        .then_some(self.download_progress)
+                                        .flatten(),
+                                    show_active_state && self.cancel_requested,
+                                ) {
                                     clicked_product = Some(view.product);
                                 }
                             }
@@ -385,9 +471,13 @@ impl eframe::App for InstallerApp {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 10.0;
                             ui.label(
-                                RichText::new(self.platform.description.clone())
-                                    .size(12.0)
-                                    .color(Color32::from_rgb(165, 169, 177)),
+                                RichText::new(format!(
+                                    "{} · easy agent {}",
+                                    friendly_platform_description(&self.platform),
+                                    env!("CARGO_PKG_VERSION")
+                                ))
+                                .size(12.0)
+                                .color(Color32::from_rgb(112, 117, 126)),
                             );
                             ui.label(
                                 RichText::new("·")
@@ -414,16 +504,29 @@ impl eframe::App for InstallerApp {
                                 ui.spinner();
                             }
                             if self.batch_running {
-                                let cancel = ui.add(
-                                    egui::Button::new(
-                                        RichText::new("取消后续下载")
+                                if operation_can_cancel(self.active_operation_state) {
+                                    let cancel = ui.add_enabled(
+                                        !self.cancel_requested,
+                                        egui::Button::new(
+                                            RichText::new(if self.cancel_requested {
+                                                "正在取消…"
+                                            } else {
+                                                "取消任务"
+                                            })
                                             .size(12.0)
-                                            .color(Color32::from_rgb(180, 84, 72)),
-                                    )
-                                    .frame(false),
-                                );
-                                if cancel.clicked() {
-                                    self.cancel_flag.store(true, Ordering::Relaxed);
+                                            .color(Color32::from_rgb(178, 66, 56)),
+                                        )
+                                        .frame(false),
+                                    );
+                                    if cancel.clicked() {
+                                        self.request_cancel();
+                                    }
+                                } else {
+                                    ui.label(
+                                        RichText::new("正在完成关键步骤，请勿关闭")
+                                            .size(12.0)
+                                            .color(Color32::from_rgb(168, 96, 44)),
+                                    );
                                 }
                             }
                         });
@@ -455,6 +558,22 @@ impl eframe::App for InstallerApp {
         if self.confirmation_open {
             let mut confirm = false;
             let mut close = false;
+            let action_label = self
+                .products
+                .iter()
+                .find(|view| view.selected)
+                .map(|view| {
+                    format!(
+                        "{} {}",
+                        if view.detection.installed {
+                            "更新"
+                        } else {
+                            "安装"
+                        },
+                        view.product.display_name()
+                    )
+                })
+                .unwrap_or_else(|| "开始操作".into());
             let modal = egui::Modal::new(egui::Id::new("install-confirmation"))
                 .backdrop_color(Color32::from_black_alpha(48))
                 .frame(
@@ -464,10 +583,10 @@ impl eframe::App for InstallerApp {
                         .inner_margin(egui::Margin::symmetric(18, 16)),
                 )
                 .show(ui.ctx(), |ui| {
-                    ui.set_width(440.0);
+                    ui.set_width(460.0);
                     ui.horizontal(|ui| {
                         ui.label(
-                            RichText::new("确认安装或更新")
+                            RichText::new(format!("确认{action_label}"))
                                 .size(18.0)
                                 .strong()
                                 .color(Color32::from_rgb(24, 28, 35)),
@@ -489,9 +608,9 @@ impl eframe::App for InstallerApp {
                     });
                     ui.add_space(5.0);
                     ui.label(
-                        RichText::new("准备从官方来源安装")
+                        RichText::new("请确认版本、官方来源和安装位置")
                             .size(13.0)
-                            .color(Color32::from_rgb(112, 117, 126)),
+                            .color(Color32::from_rgb(82, 88, 98)),
                     );
                     ui.add_space(12.0);
                     egui::Frame::new()
@@ -506,63 +625,125 @@ impl eframe::App for InstallerApp {
                                 .filter(|view| view.selected && view.support.can_install())
                             {
                                 if let Some(plan) = &view.install_plan {
-                                    let (title, detail) = match plan {
-                                        InstallPlan::DirectPackage(candidate) => (
-                                            format!(
-                                                "{} {}",
-                                                view.product.display_name(),
-                                                candidate.version
-                                            ),
-                                            format!(
-                                                "{:?} · {:?} · {}",
-                                                candidate.architecture,
-                                                candidate.package_kind,
-                                                candidate
-                                                    .download_url
-                                                    .host_str()
-                                                    .unwrap_or("未知 host")
-                                            ),
-                                        ),
-                                        InstallPlan::MicrosoftStore(store) => (
-                                            view.product.display_name().to_owned(),
-                                            format!(
-                                                "{:?} · Microsoft Store 后台官方源 · 安装后精确复检",
-                                                store.architecture
-                                            ),
-                                        ),
-                                    };
-                                    ui.label(RichText::new(title).size(15.0).strong());
-                                    ui.add_space(3.0);
-                                    ui.label(
-                                        RichText::new(detail)
-                                            .size(11.5)
-                                            .color(Color32::from_rgb(106, 112, 122)),
-                                    );
+                                    ui.horizontal(|ui| {
+                                        draw_product_icon(ui, view.product);
+                                        ui.add_space(10.0);
+                                        ui.vertical(|ui| {
+                                            ui.label(
+                                                RichText::new(view.product.display_name())
+                                                    .size(16.0)
+                                                    .strong()
+                                                    .color(Color32::from_rgb(24, 28, 35)),
+                                            );
+                                            ui.add_space(3.0);
+                                            let (version, source) = match plan {
+                                                InstallPlan::DirectPackage(candidate) => (
+                                                    format!(
+                                                        "{} → {}",
+                                                        view.detection
+                                                            .version
+                                                            .as_deref()
+                                                            .map(|version| display_version(
+                                                                view.product,
+                                                                version
+                                                            ))
+                                                            .unwrap_or_else(|| "未安装".into()),
+                                                        display_version(
+                                                            view.product,
+                                                            &candidate.version
+                                                        )
+                                                    ),
+                                                    format!(
+                                                        "{} · {} · {}",
+                                                        friendly_architecture(
+                                                            candidate.architecture
+                                                        ),
+                                                        friendly_package_kind(
+                                                            candidate.package_kind
+                                                        ),
+                                                        candidate
+                                                            .download_url
+                                                            .host_str()
+                                                            .unwrap_or("官方服务")
+                                                    ),
+                                                ),
+                                                InstallPlan::MicrosoftStore(store) => (
+                                                    view.detection
+                                                        .version
+                                                        .as_deref()
+                                                        .map(|version| format!(
+                                                            "当前版本 {version} → 官方最新版本"
+                                                        ))
+                                                        .unwrap_or_else(|| {
+                                                            "未安装 → 官方最新版本".into()
+                                                        }),
+                                                    format!(
+                                                        "{} · Microsoft 官方服务",
+                                                        friendly_architecture(store.architecture)
+                                                    ),
+                                                ),
+                                            };
+                                            ui.label(
+                                                RichText::new(version)
+                                                    .size(13.0)
+                                                    .color(Color32::from_rgb(70, 77, 88)),
+                                            );
+                                            ui.add_space(2.0);
+                                            ui.label(
+                                                RichText::new(source)
+                                                    .size(12.0)
+                                                    .color(Color32::from_rgb(96, 103, 114)),
+                                            );
+                                        });
+                                    });
                                 }
                             }
                         });
                     ui.add_space(11.0);
+                    egui::Frame::new()
+                        .fill(Color32::from_rgb(244, 248, 255))
+                        .corner_radius(8.0)
+                        .inner_margin(egui::Margin::symmetric(12, 10))
+                        .show(ui, |ui| {
+                            ui.label(
+                                RichText::new(
+                                    "将检查文件完整性、官方签名、应用身份、版本和芯片架构。更新失败会自动恢复原版本。",
+                                )
+                                .size(12.0)
+                                .color(Color32::from_rgb(64, 82, 112)),
+                            );
+                            ui.add_space(3.0);
+                            ui.label(
+                                RichText::new(install_location_summary(&self.platform))
+                                    .size(12.0)
+                                    .color(Color32::from_rgb(82, 88, 98)),
+                            );
+                        });
+                    ui.add_space(8.0);
                     ui.label(
                         RichText::new(
-                            "点击“开始”即确认本次官方来源与软件包协议。更新可能关闭正在运行的目标客户端；请先保存未提交内容。取消只停止尚未启动的步骤。",
+                            "请先保存目标客户端中的未提交内容。如果应用正在运行，安装会提示你先退出或由系统安全处理。",
                         )
-                        .size(11.5)
-                        .color(Color32::from_rgb(112, 117, 126)),
+                        .size(12.0)
+                        .color(Color32::from_rgb(82, 88, 98)),
                     );
                     ui.add_space(14.0);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let start = egui::Button::new(
-                            RichText::new("开始").size(13.5).color(Color32::WHITE),
+                            RichText::new(&action_label)
+                                .size(13.5)
+                                .strong()
+                                .color(Color32::WHITE),
                         )
-                        .min_size(egui::vec2(82.0, 34.0))
-                        .fill(Color32::from_rgb(66, 124, 216))
+                        .min_size(egui::vec2(128.0, 36.0))
+                        .fill(Color32::from_rgb(44, 105, 200))
                         .stroke(egui::Stroke::NONE)
-                        .corner_radius(6.0);
+                        .corner_radius(7.0);
                         if ui.add(start).clicked() {
                             confirm = true;
                         }
                         let back = egui::Button::new(RichText::new("返回").size(13.5))
-                            .min_size(egui::vec2(76.0, 34.0));
+                            .min_size(egui::vec2(82.0, 36.0));
                         if ui.add(back).clicked() {
                             close = true;
                         }
@@ -574,6 +755,70 @@ impl eframe::App for InstallerApp {
             if confirm {
                 self.confirmation_open = false;
                 self.start_install_batch();
+            }
+        }
+
+        if self.close_confirmation_open {
+            let mut keep_open = true;
+            let can_cancel = operation_can_cancel(self.active_operation_state);
+            egui::Modal::new(egui::Id::new("close-running-task"))
+                .backdrop_color(Color32::from_black_alpha(52))
+                .frame(
+                    egui::Frame::popup(ui.style())
+                        .fill(Color32::WHITE)
+                        .corner_radius(12.0)
+                        .inner_margin(egui::Margin::symmetric(20, 18)),
+                )
+                .show(ui.ctx(), |ui| {
+                    ui.set_width(410.0);
+                    ui.label(
+                        RichText::new("任务仍在进行")
+                            .size(18.0)
+                            .strong()
+                            .color(Color32::from_rgb(24, 28, 35)),
+                    );
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(if can_cancel {
+                            "现在关闭可能中断下载。可以继续等待，或安全取消任务后自动退出。"
+                        } else {
+                            "应用正在写入或复检，当前不能安全退出。请等待这一步完成。"
+                        })
+                        .size(13.0)
+                        .color(Color32::from_rgb(82, 88, 98)),
+                    );
+                    ui.add_space(16.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let wait = egui::Button::new(
+                            RichText::new("继续等待").size(13.5).color(Color32::WHITE),
+                        )
+                        .min_size(egui::vec2(96.0, 36.0))
+                        .fill(Color32::from_rgb(44, 105, 200))
+                        .stroke(egui::Stroke::NONE)
+                        .corner_radius(7.0);
+                        if ui.add(wait).clicked() {
+                            keep_open = false;
+                        }
+                        if can_cancel {
+                            let cancel_and_close = egui::Button::new(
+                                RichText::new(if self.cancel_requested {
+                                    "取消完成后退出"
+                                } else {
+                                    "取消任务并退出"
+                                })
+                                .size(13.5),
+                            )
+                            .min_size(egui::vec2(126.0, 36.0));
+                            if ui.add(cancel_and_close).clicked() {
+                                self.request_cancel();
+                                self.close_after_batch = true;
+                                keep_open = false;
+                            }
+                        }
+                    });
+                });
+            if !keep_open {
+                self.close_confirmation_open = false;
             }
         }
     }
@@ -598,64 +843,109 @@ fn draw_product_row(
     view: &ProductView,
     scanning: bool,
     batch_running: bool,
+    active_state: Option<OperationState>,
+    download_progress: Option<f32>,
+    cancel_requested: bool,
 ) -> bool {
-    let row_height = 80.0;
-    let (rect, _) = ui.allocate_exact_size(
+    let row_height = 84.0;
+    let (rect, row_response) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), row_height),
         egui::Sense::hover(),
     );
+    if active_state.is_some() {
+        ui.painter().rect_filled(
+            rect.shrink2(egui::vec2(2.0, 4.0)),
+            9.0,
+            Color32::from_rgb(246, 249, 255),
+        );
+    } else if row_response.hovered() {
+        ui.painter().rect_filled(
+            rect.shrink2(egui::vec2(2.0, 4.0)),
+            9.0,
+            Color32::from_rgb(250, 251, 253),
+        );
+    }
     let mut clicked = false;
     ui.scope_builder(
         egui::UiBuilder::new()
-            .max_rect(rect.shrink2(egui::vec2(12.0, 0.0)))
+            .max_rect(rect.shrink2(egui::vec2(12.0, 2.0)))
             .layout(egui::Layout::left_to_right(egui::Align::Center)),
         |ui| {
             draw_product_icon(ui, view.product);
-            ui.add_space(18.0);
+            ui.add_space(16.0);
 
             ui.allocate_ui_with_layout(
-                egui::vec2((rect.width() - 184.0).max(250.0), 50.0),
+                egui::vec2((rect.width() - 188.0).max(270.0), 60.0),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     ui.label(
                         RichText::new(view.product.display_name())
-                            .size(19.0)
+                            .size(18.0)
                             .color(Color32::from_rgb(24, 28, 35)),
                     );
-                    ui.add_space(5.0);
+                    ui.add_space(4.0);
                     let subtitle = product_subtitle(view, scanning, batch_running);
-                    ui.add(
+                    let detail = product_detail(view);
+                    let subtitle_response = ui.add(
                         egui::Label::new(
                             RichText::new(&subtitle)
-                                .size(11.5)
+                                .size(12.5)
                                 .color(subtitle_color(view)),
                         )
                         .truncate(),
-                    )
-                    .on_hover_text(subtitle);
+                    );
+                    subtitle_response.on_hover_text(detail);
+                    if let Some(progress) = download_progress {
+                        ui.add_space(5.0);
+                        ui.add(
+                            egui::ProgressBar::new(progress)
+                                .desired_width(ui.available_width())
+                                .desired_height(5.0)
+                                .fill(Color32::from_rgb(44, 105, 200))
+                                .animate(true),
+                        );
+                    }
                 },
             );
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let (label, enabled) = product_action(view, scanning, batch_running);
-                let blue = Color32::from_rgb(66, 124, 216);
-                let button = egui::Button::new(RichText::new(label).size(15.0).color(if enabled {
-                    blue
-                } else {
-                    Color32::from_rgb(157, 164, 175)
-                }))
-                .min_size(egui::vec2(82.0, 36.0))
-                .fill(Color32::WHITE)
-                .stroke(egui::Stroke::new(
-                    1.0,
-                    if enabled {
+                let (label, enabled) = active_state
+                    .map(|state| {
+                        (
+                            if cancel_requested {
+                                "正在取消"
+                            } else {
+                                operation_button_label(state)
+                            },
+                            false,
+                        )
+                    })
+                    .unwrap_or_else(|| product_action(view, scanning, batch_running));
+                let blue = Color32::from_rgb(44, 105, 200);
+                let button =
+                    egui::Button::new(RichText::new(label).size(14.5).strong().color(if enabled {
+                        Color32::WHITE
+                    } else {
+                        Color32::from_rgb(112, 119, 130)
+                    }))
+                    .min_size(egui::vec2(92.0, 38.0))
+                    .fill(if enabled {
                         blue
                     } else {
-                        Color32::from_rgb(207, 212, 220)
-                    },
-                ))
-                .corner_radius(6.0);
-                if ui.add_enabled(enabled, button).clicked() {
+                        Color32::from_rgb(247, 248, 250)
+                    })
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        if enabled {
+                            blue
+                        } else {
+                            Color32::from_rgb(216, 220, 227)
+                        },
+                    ))
+                    .corner_radius(7.0);
+                let mut response = ui.add_enabled(enabled, button);
+                response = response.on_hover_text(product_detail(view));
+                if response.clicked() {
                     clicked = true;
                 }
             });
@@ -683,13 +973,23 @@ fn product_subtitle(view: &ProductView, scanning: bool, batch_running: bool) -> 
             match (view.detection.installed, view.detection.version.as_deref()) {
                 (true, Some(installed)) => {
                     if version_is_older_for_product(view.product, installed, &latest.version) {
-                        format!("已安装 {installed} · 可更新至 {}", latest.version)
+                        format!(
+                            "已安装 {} · 可更新至 {}",
+                            display_version(view.product, installed),
+                            display_version(view.product, &latest.version)
+                        )
                     } else {
-                        format!("已安装 {installed} · 已是最新版本")
+                        format!(
+                            "已安装 {} · 已是最新版本",
+                            display_version(view.product, installed)
+                        )
                     }
                 }
                 (true, None) => "已检测到安装".into(),
-                (false, _) => format!("最新版本 {}", latest.version),
+                (false, _) => format!(
+                    "可安装 · 最新版本 {}",
+                    display_version(view.product, &latest.version)
+                ),
             }
         }
         Some(InstallPlan::MicrosoftStore(_)) => {
@@ -699,24 +999,28 @@ fn product_subtitle(view: &ProductView, scanning: bool, batch_running: bool) -> 
                 (false, _) => "由 Microsoft 官方服务安装最新版本".into(),
             }
         }
-        None if matches!(view.support, SupportState::Unsupported(_)) => {
-            "当前系统或架构不支持".into()
-        }
-        None if view.detection.installed => view
-            .detection
-            .version
-            .as_deref()
-            .map(|version| format!("已安装 {version}"))
-            .unwrap_or_else(|| "已检测到安装".into()),
-        None => "官方版本信息暂不可用".into(),
+        None => match &view.support {
+            SupportState::Disabled(_) => disabled_product_summary(view.product).into(),
+            SupportState::Unsupported(_) => "当前系统或芯片不受官方支持".into(),
+            SupportState::Ready => {
+                match (view.detection.installed, view.detection.version.as_deref()) {
+                    (true, Some(version)) => format!(
+                        "已安装 {} · 暂时无法获取最新版本",
+                        display_version(view.product, version)
+                    ),
+                    (true, None) => "已检测到安装 · 暂时无法获取最新版本".into(),
+                    (false, _) => "暂时无法获取最新版本，请稍后刷新".into(),
+                }
+            }
+        },
     }
 }
 
 fn subtitle_color(view: &ProductView) -> Color32 {
     match view.support {
-        SupportState::Ready => Color32::from_rgb(132, 137, 145),
-        SupportState::Disabled(_) => Color32::from_rgb(142, 147, 156),
-        SupportState::Unsupported(_) => Color32::from_rgb(165, 169, 177),
+        SupportState::Ready => Color32::from_rgb(96, 103, 114),
+        SupportState::Disabled(_) => Color32::from_rgb(154, 94, 42),
+        SupportState::Unsupported(_) => Color32::from_rgb(116, 122, 132),
     }
 }
 
@@ -735,11 +1039,11 @@ fn product_action(view: &ProductView, scanning: bool, batch_running: bool) -> (&
         return ("检测中", false);
     }
     match &view.support {
-        SupportState::Disabled(_) => ("待验证", false),
+        SupportState::Disabled(_) => ("暂不可用", false),
         SupportState::Unsupported(_) => ("不支持", false),
         SupportState::Ready => {
             let Some(plan) = &view.install_plan else {
-                return ("不可用", false);
+                return ("暂不可用", false);
             };
             match plan {
                 InstallPlan::DirectPackage(latest) => {
@@ -769,6 +1073,115 @@ fn product_action(view: &ProductView, scanning: bool, batch_running: bool) -> (&
                 }
             }
         }
+    }
+}
+
+fn product_detail(view: &ProductView) -> String {
+    match &view.support {
+        SupportState::Disabled(reason) | SupportState::Unsupported(reason) => reason.clone(),
+        SupportState::Ready => view.status_line.clone(),
+    }
+}
+
+fn disabled_product_summary(product: ProductId) -> &'static str {
+    match product {
+        ProductId::Claude => "官方下载服务暂时不可用",
+        ProductId::Hermes => "官方安装流程暂未完成验证",
+        _ => "当前版本暂未完成安全验证",
+    }
+}
+
+const fn support_display_rank(support: &SupportState) -> u8 {
+    match support {
+        SupportState::Ready => 0,
+        SupportState::Disabled(_) => 1,
+        SupportState::Unsupported(_) => 2,
+    }
+}
+
+fn display_version(product: ProductId, version: &str) -> String {
+    if product == ProductId::WorkBuddy {
+        version.split('.').take(3).collect::<Vec<_>>().join(".")
+    } else {
+        version.to_owned()
+    }
+}
+
+const fn operation_button_label(state: OperationState) -> &'static str {
+    match state {
+        OperationState::Ready => "准备中",
+        OperationState::Downloading => "下载中",
+        OperationState::Verifying => "验证中",
+        OperationState::AwaitingUserInstall => "准备安装",
+        OperationState::Installing => "安装中",
+        OperationState::Postchecking => "复检中",
+        OperationState::Succeeded => "已完成",
+        OperationState::ResultUnknown => "待复检",
+        OperationState::Failed => "失败",
+        OperationState::Cancelled => "已取消",
+    }
+}
+
+const fn operation_can_cancel(state: Option<OperationState>) -> bool {
+    matches!(
+        state,
+        Some(OperationState::Ready | OperationState::Downloading | OperationState::Verifying)
+    )
+}
+
+fn parse_download_progress(message: &str) -> Option<f32> {
+    let percent = message
+        .strip_prefix("已下载 ")?
+        .split('%')
+        .next()?
+        .trim()
+        .parse::<f32>()
+        .ok()?;
+    Some((percent / 100.0).clamp(0.0, 1.0))
+}
+
+fn friendly_platform_description(platform: &PlatformInfo) -> String {
+    let version = platform
+        .os_version
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(" {value}"))
+        .unwrap_or_default();
+    match (platform.os, platform.architecture) {
+        (OperatingSystem::MacOs, Architecture::X64) => format!("macOS{version} · Intel Mac"),
+        (OperatingSystem::MacOs, Architecture::Arm64) => {
+            format!("macOS{version} · Apple Silicon")
+        }
+        (OperatingSystem::Windows, Architecture::X64) => format!("Windows{version} · x64"),
+        (OperatingSystem::Windows, Architecture::Arm64) => format!("Windows{version} · ARM64"),
+        _ => platform.description.clone(),
+    }
+}
+
+const fn friendly_architecture(architecture: Architecture) -> &'static str {
+    match architecture {
+        Architecture::X64 => "Intel / x64",
+        Architecture::Arm64 => "Apple Silicon / ARM64",
+        Architecture::Unsupported => "未知芯片架构",
+    }
+}
+
+const fn friendly_package_kind(kind: PackageKind) -> &'static str {
+    match kind {
+        PackageKind::Exe => "EXE 安装包",
+        PackageKind::Msi => "MSI 安装包",
+        PackageKind::Msix => "MSIX 应用包",
+        PackageKind::Dmg => "DMG 应用包",
+        PackageKind::TarGz => "签名应用压缩包",
+        PackageKind::Zip => "ZIP 应用包",
+    }
+}
+
+fn install_location_summary(platform: &PlatformInfo) -> &'static str {
+    match platform.os {
+        OperatingSystem::MacOs => "安装位置：已有应用原位置；首次安装到用户 Applications。",
+        OperatingSystem::Windows => "安装位置：由 Windows 或官方安装程序安全管理。",
+        OperatingSystem::Unsupported => "安装位置：当前平台不受支持。",
     }
 }
 
@@ -851,9 +1264,7 @@ fn install_system_font(context: &egui::Context) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{
-        Architecture, OperatingSystem, OperationState, PackageKind, ReleaseCandidate,
-    };
+    use crate::core::ReleaseCandidate;
 
     fn chatgpt_view() -> ProductView {
         ProductView {
@@ -929,6 +1340,12 @@ mod tests {
             cancel_flag: Arc::new(AtomicBool::new(false)),
             batch_summary: None,
             registry_error: None,
+            active_product: None,
+            active_operation_state: None,
+            download_progress: None,
+            cancel_requested: false,
+            close_confirmation_open: false,
+            close_after_batch: false,
         }
     }
 
@@ -985,6 +1402,71 @@ mod tests {
             evidence: "Uninstall:WorkBuddy 5.1.7 [HKCU]".into(),
         };
         assert_eq!(product_action(&view, false, false), ("更新", true));
+    }
+
+    #[test]
+    fn unavailable_products_show_a_simple_summary_and_preserve_exact_details() {
+        let mut view = workbuddy_view();
+        view.install_plan = None;
+        view.support = SupportState::Disabled("官方摘要与下载文件不一致，安装保持禁用".into());
+        view.detection = Detection {
+            installed: true,
+            version: Some("5.3.8".into()),
+            ..Detection::absent("fixture")
+        };
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "当前版本暂未完成安全验证"
+        );
+        assert_eq!(
+            product_detail(&view),
+            "官方摘要与下载文件不一致，安装保持禁用"
+        );
+        assert_eq!(product_action(&view, false, false), ("暂不可用", false));
+
+        view.support = SupportState::Unsupported("厂商明确不支持 Intel Mac".into());
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "当前系统或芯片不受官方支持"
+        );
+        assert_eq!(product_detail(&view), "厂商明确不支持 Intel Mac");
+        assert_eq!(product_action(&view, false, false), ("不支持", false));
+
+        view.support = SupportState::Ready;
+        view.status_line = "已安装 5.3.8 · 版本解析：server returned HTTP 403".into();
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "已安装 5.3.8 · 暂时无法获取最新版本"
+        );
+        assert_eq!(product_detail(&view), view.status_line);
+    }
+
+    #[test]
+    fn download_progress_and_cancel_boundaries_are_ui_safe() {
+        let progress = parse_download_progress("已下载 65.8% (260.3/395.7 MiB)").unwrap();
+        assert!((progress - 0.658).abs() < 0.0001);
+        assert_eq!(parse_download_progress("已下载 12.0 MiB"), None);
+        assert!(operation_can_cancel(Some(OperationState::Downloading)));
+        assert!(operation_can_cancel(Some(OperationState::Verifying)));
+        assert!(!operation_can_cancel(Some(OperationState::Installing)));
+        assert!(!operation_can_cancel(Some(OperationState::Postchecking)));
+    }
+
+    #[test]
+    fn platform_and_workbuddy_versions_use_user_facing_labels() {
+        assert_eq!(
+            display_version(ProductId::WorkBuddy, "5.3.8.34705286"),
+            "5.3.8"
+        );
+        assert_eq!(
+            friendly_platform_description(&PlatformInfo {
+                os: OperatingSystem::MacOs,
+                architecture: Architecture::X64,
+                os_version: Some("26.4.1".into()),
+                description: "macos 26.4.1 / x64".into(),
+            }),
+            "macOS 26.4.1 · Intel Mac"
+        );
     }
 
     #[test]

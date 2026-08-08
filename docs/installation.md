@@ -112,9 +112,8 @@ APPLE_NOTARY_PROFILE='easy-agent-notary' \
 
 应用自身可以正常运行不代表五款第三方客户端都已获准安装。`easy agent` 会在信任条目尚未闭合时禁用对应按钮。当前 macOS 的主要 Gate 是：
 
-- WorkBuddy 的官方 API SHA-256 与 CDN 完整 ZIP 不一致；
 - Claude 稳定下载端点在本机网络出现 Cloudflare challenge；
-- 所有支持的产品仍需 Intel/Apple Silicon 干净机的安装、更新、回滚和 Gatekeeper 矩阵；
+- Hermes Intel 由厂商明确不支持；Apple Silicon DMG 是尚未建模最终桌面/runtime 状态的 vendor bootstrap；
 - 生产级 `easy agent` DMG 仍需 Developer ID 与 notarization 凭据。
 
-这不是需要用户“手动解锁”的错误。请参考 [实现与验证状态](implementation-status.md) 和 [维护手册](maintenance.md) 取得或补充证据。
+WorkBuddy、CC Switch 与 ChatGPT 的 Intel/Apple Silicon 直接应用包条目已经启用。WorkBuddy 官方摘要已确认错误，因此仅该产品的 macOS 条目改用 Apple 平台签名与固定应用身份；下载文件本身仍会计算实际 SHA-256，并在平台验证前后、进入安装交接前重复核对。它们仍会在目标应用运行、安装目录不可写、签名/身份/版本变化时失败关闭。请参考 [macOS 功能链路审计](../evidence/macos-functional-parity-audit-2026-08-08.md)、[实现与验证状态](implementation-status.md) 和 [维护手册](maintenance.md)。

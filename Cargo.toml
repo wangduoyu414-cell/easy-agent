@@ -8,14 +8,16 @@ description = "Fail-closed installer assistant for five fixed AI desktop clients
 [dependencies]
 base64 = "0.22"
 crossbeam-channel = "0.5"
+ed25519-dalek = "2.2"
 eframe = { version = "0.35.0", default-features = false, features = ["accesskit", "default_fonts", "glow"] }
 egui_extras = { version = "0.35.0", features = ["image"] }
 hex = "0.4"
 flate2 = "1.1"
 minisign-verify = "0.2.5"
+memmap2 = "0.9"
 plist = "1.7"
 regex = "1.11"
-reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "native-tls-no-alpn"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "native-tls-no-alpn", "system-proxy"] }
 roxmltree = "0.21"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"

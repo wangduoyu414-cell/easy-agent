@@ -130,6 +130,22 @@ pub fn detect_product(product: ProductId, trust: Option<&TrustEntry>) -> Detecti
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn preflight_direct_install(
+    trust: &TrustEntry,
+    expected_architecture: Architecture,
+) -> Result<(), String> {
+    macos::preflight_direct_install(trust, expected_architecture)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn preflight_direct_install(
+    _trust: &TrustEntry,
+    _expected_architecture: Architecture,
+) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg(windows)]
 pub fn verify_artifact(
     path: &Path,

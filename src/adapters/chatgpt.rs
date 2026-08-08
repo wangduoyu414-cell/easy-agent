@@ -122,7 +122,7 @@ pub fn parse_chatgpt_macos_appcast(
         package_kind: PackageKind::Zip,
         download_url,
         expected_sha256: None,
-        detached_signature: None,
+        detached_signature: Some(signature.to_owned()),
     })
 }
 
