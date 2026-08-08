@@ -797,34 +797,55 @@ fn draw_brand_icon(ui: &mut egui::Ui, size: f32) {
     );
 }
 
-fn install_system_font(context: &egui::Context) {
-    let candidates = [
-        r"C:\Windows\Fonts\msyh.ttc",
-        r"C:\Windows\Fonts\msyh.ttf",
-        "/System/Library/Fonts/PingFang.ttc",
-    ];
-    let Some((_, bytes)) = candidates
-        .iter()
-        .find_map(|path| fs::read(path).ok().map(|bytes| (*path, bytes)))
+#[cfg(target_os = "windows")]
+const SYSTEM_CJK_FONT_CANDIDATES: &[(&str, u32)] = &[
+    (r"C:\Windows\Fonts\msyh.ttc", 0),
+    (r"C:\Windows\Fonts\msyh.ttf", 0),
+    (r"C:\Windows\Fonts\simhei.ttf", 0),
+    (r"C:\Windows\Fonts\simsun.ttc", 0),
+];
+
+#[cfg(target_os = "macos")]
+const SYSTEM_CJK_FONT_CANDIDATES: &[(&str, u32)] = &[
+    ("/System/Library/Fonts/PingFang.ttc", 0),
+    ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
+    ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
+    ("/System/Library/Fonts/STHeiti Light.ttc", 0),
+    ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+];
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+const SYSTEM_CJK_FONT_CANDIDATES: &[(&str, u32)] = &[];
+
+fn install_system_font(context: &egui::Context) -> bool {
+    let Some((_, bytes, face_index)) =
+        SYSTEM_CJK_FONT_CANDIDATES
+            .iter()
+            .find_map(|(path, face_index)| {
+                fs::read(path).ok().map(|bytes| (*path, bytes, *face_index))
+            })
     else {
-        return;
+        return false;
     };
 
     let mut fonts = FontDefinitions::default();
+    let mut font_data = FontData::from_owned(bytes);
+    font_data.index = face_index;
     fonts
         .font_data
-        .insert("system-cjk".into(), FontData::from_owned(bytes).into());
+        .insert("system-cjk".into(), font_data.into());
     fonts
         .families
         .entry(FontFamily::Proportional)
         .or_default()
-        .insert(0, "system-cjk".into());
+        .push("system-cjk".into());
     fonts
         .families
         .entry(FontFamily::Monospace)
         .or_default()
-        .insert(0, "system-cjk".into());
+        .push("system-cjk".into());
     context.set_fonts(fonts);
+    true
 }
 
 #[cfg(test)]
@@ -1058,5 +1079,24 @@ mod tests {
             app.batch_summary.as_deref(),
             Some("批次完成：成功 0，失败 1，结果待复检 0，取消 0 · 操作日志不可用：access denied")
         );
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    #[test]
+    fn system_font_fallback_contains_required_chinese_glyphs() {
+        let context = egui::Context::default();
+        assert!(install_system_font(&context));
+
+        let mut contains_required_glyphs = false;
+        let _ = context.run_ui(egui::RawInput::default(), |ui| {
+            contains_required_glyphs = ui.ctx().fonts_mut(|fonts| {
+                fonts.has_glyphs(
+                    &egui::FontId::proportional(16.0),
+                    "正在检测安装状态与官方版本更新不可用",
+                )
+            });
+        });
+
+        assert!(contains_required_glyphs);
     }
 }
