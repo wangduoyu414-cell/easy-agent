@@ -655,7 +655,11 @@ fn draw_product_row(
                     },
                 ))
                 .corner_radius(6.0);
-                if ui.add_enabled(enabled, button).clicked() {
+                let mut response = ui.add_enabled(enabled, button);
+                if let Some(detail) = view.support.detail() {
+                    response = response.on_hover_text(detail);
+                }
+                if response.clicked() {
                     clicked = true;
                 }
             });
@@ -699,16 +703,10 @@ fn product_subtitle(view: &ProductView, scanning: bool, batch_running: bool) -> 
                 (false, _) => "由 Microsoft 官方服务安装最新版本".into(),
             }
         }
-        None if matches!(view.support, SupportState::Unsupported(_)) => {
-            "当前系统或架构不支持".into()
-        }
-        None if view.detection.installed => view
-            .detection
-            .version
-            .as_deref()
-            .map(|version| format!("已安装 {version}"))
-            .unwrap_or_else(|| "已检测到安装".into()),
-        None => "官方版本信息暂不可用".into(),
+        None => match &view.support {
+            SupportState::Disabled(reason) | SupportState::Unsupported(reason) => reason.clone(),
+            SupportState::Ready => view.status_line.clone(),
+        },
     }
 }
 
@@ -985,6 +983,37 @@ mod tests {
             evidence: "Uninstall:WorkBuddy 5.1.7 [HKCU]".into(),
         };
         assert_eq!(product_action(&view, false, false), ("更新", true));
+    }
+
+    #[test]
+    fn unavailable_products_show_the_exact_support_reason() {
+        let mut view = workbuddy_view();
+        view.install_plan = None;
+        view.support = SupportState::Disabled("官方摘要与下载文件不一致，安装保持禁用".into());
+        view.detection = Detection {
+            installed: true,
+            version: Some("5.3.8".into()),
+            ..Detection::absent("fixture")
+        };
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "官方摘要与下载文件不一致，安装保持禁用"
+        );
+        assert_eq!(product_action(&view, false, false), ("待验证", false));
+
+        view.support = SupportState::Unsupported("厂商明确不支持 Intel Mac".into());
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "厂商明确不支持 Intel Mac"
+        );
+        assert_eq!(product_action(&view, false, false), ("不支持", false));
+
+        view.support = SupportState::Ready;
+        view.status_line = "已安装 5.3.8 · 版本解析：server returned HTTP 403".into();
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "已安装 5.3.8 · 版本解析：server returned HTTP 403"
+        );
     }
 
     #[test]

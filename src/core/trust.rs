@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use base64::Engine;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -11,6 +12,21 @@ pub enum DistributionKind {
     #[default]
     DirectPackage,
     MicrosoftStore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MacOsInstallStrategy {
+    DirectAppBundle,
+    VendorBootstrap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteDigestPolicy {
+    #[default]
+    EnforceIfPresent,
+    PlatformSignatureOnly,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -76,6 +92,10 @@ pub struct TrustEntry {
     #[serde(default)]
     pub updater_public_key: Option<String>,
     #[serde(default)]
+    pub sparkle_ed25519_public_key: Option<String>,
+    #[serde(default)]
+    pub remote_digest_policy: RemoteDigestPolicy,
+    #[serde(default)]
     pub store_id: Option<String>,
     #[serde(default)]
     pub minimum_winget_version: Option<String>,
@@ -103,6 +123,8 @@ pub struct TrustEntry {
     pub macos_application_name: Option<String>,
     #[serde(default)]
     pub minimum_macos_version: Option<String>,
+    #[serde(default)]
+    pub macos_install_strategy: Option<MacOsInstallStrategy>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -183,7 +205,8 @@ impl TrustRegistry {
             let has_macos_fields = entry.macos_bundle_id.is_some()
                 || entry.macos_team_id.is_some()
                 || entry.macos_application_name.is_some()
-                || entry.minimum_macos_version.is_some();
+                || entry.minimum_macos_version.is_some()
+                || entry.macos_install_strategy.is_some();
             if has_macos_fields && entry.os != OperatingSystem::MacOs {
                 return Err(TrustRegistryError::Invalid(
                     key.0.into(),
@@ -217,6 +240,17 @@ impl TrustRegistry {
                     key.1.into(),
                     key.2.into(),
                     "minimum_macos_version must be numeric dot-separated".into(),
+                ));
+            }
+            if entry.os == OperatingSystem::MacOs
+                && !entry.package_kinds.is_empty()
+                && entry.macos_install_strategy.is_none()
+            {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "macOS package entries must declare macos_install_strategy".into(),
                 ));
             }
 
@@ -269,6 +303,50 @@ impl TrustRegistry {
                 ));
             }
 
+            if entry.updater_public_key.is_some() && entry.sparkle_ed25519_public_key.is_some() {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "an entry cannot configure both minisign and Sparkle Ed25519 keys".into(),
+                ));
+            }
+            if let Some(encoded_key) = entry.sparkle_ed25519_public_key.as_deref() {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded_key.trim())
+                    .ok();
+                if decoded.as_deref().is_none_or(|value| value.len() != 32)
+                    || entry.os != OperatingSystem::MacOs
+                    || entry.product != ProductId::ChatGpt
+                    || entry.package_kinds.as_slice() != [PackageKind::Zip]
+                {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "sparkle_ed25519_public_key is limited to a base64 32-byte ChatGPT macOS ZIP key"
+                            .into(),
+                    ));
+                }
+            }
+            if entry.remote_digest_policy == RemoteDigestPolicy::PlatformSignatureOnly
+                && (entry.product != ProductId::WorkBuddy
+                    || entry.os != OperatingSystem::MacOs
+                    || entry.distribution != DistributionKind::DirectPackage
+                    || entry.package_kinds.as_slice() != [PackageKind::Zip]
+                    || entry.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle)
+                    || entry.macos_bundle_id.as_deref() != Some("com.workbuddy.workbuddy")
+                    || entry.macos_team_id.as_deref() != Some("FN2V63AD2J"))
+            {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "platform_signature_only digest policy is limited to the pinned WorkBuddy macOS ZIP identity"
+                        .into(),
+                ));
+            }
+
             if entry.allow_trusted_update_when_management_unknown
                 && (entry.product != ProductId::CcSwitch
                     || entry.package_kinds.as_slice() != [PackageKind::Msi]
@@ -307,6 +385,15 @@ impl TrustRegistry {
                     && entry.macos_application_name.is_none()
                 {
                     Some("macos_application_name")
+                } else if entry.os == OperatingSystem::MacOs
+                    && entry.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle)
+                {
+                    Some("implemented macos_install_strategy")
+                } else if entry.os == OperatingSystem::MacOs
+                    && entry.product == ProductId::ChatGpt
+                    && entry.sparkle_ed25519_public_key.is_none()
+                {
+                    Some("sparkle_ed25519_public_key")
                 } else if entry.package_kinds.contains(&PackageKind::Msix)
                     && entry.msix_publisher.is_none()
                 {

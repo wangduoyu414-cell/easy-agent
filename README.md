@@ -78,10 +78,10 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 | --- | --- | --- | --- |
 | Windows x64 | 原生单文件 EXE 构建链已具备 | 五款产品的受控解析/验证/执行链已实现 | 干净机首次安装与更新矩阵仍待关闭。 |
 | Windows ARM64 | 已提供构建和 CI 验证入口 | 取决于各厂商是否提供原生包 | 需 Windows ARM64 真机/工具链证据。 |
-| macOS Intel | Universal 应用、检测、验证、原子复制/回滚已实现 | 所有厂商条目保持禁用 | Intel 只读取证已完成；干净机安装/更新矩阵待完成。 |
-| macOS Apple Silicon | 同一 Universal 应用原生运行 | 所有厂商条目保持禁用 | 静态制品/身份已核验，仍需真实 ARM64 安装矩阵。 |
+| macOS Intel | Universal 应用、检测、验证、原子复制/回滚已实现 | WorkBuddy、CC Switch、ChatGPT 已启用；Claude 禁用；Hermes 不支持 | 三者完整官方包均通过生产 verifier；CC Switch 与 ChatGPT 另有临时激活 proof。正式 DMG 仍待签名公证。 |
+| macOS Apple Silicon | 同一 Universal 应用原生运行 | WorkBuddy、CC Switch、ChatGPT 已启用；Claude、Hermes bootstrap 禁用 | ARM64 完整包签名、身份和 slice 已核验；仍建议发布前补干净机 UI 矩阵。 |
 
-macOS 目前的禁用不是功能降级：它是刻意的 fail-closed 状态。具体阻塞项包括 WorkBuddy 官方 API SHA-256 与 CDN 完整 ZIP 不一致、Claude 稳定重定向的 Cloudflare challenge、Apple Silicon 真机矩阵，以及本应用正式发布所需的 Apple Developer ID 与 notarization 凭据。完整证据见 [macOS Intel 只读取证](evidence/macos-intel-readonly-proof-2026-08-04.md) 和 [实现状态](docs/implementation-status.md)。
+macOS 按产品独立处理：WorkBuddy 的官方 API SHA-256 已确认错误，因此只在 WorkBuddy/macOS 上改用 Apple 平台签名、固定 Team/Bundle/版本/架构和稳定文件绑定；其他产品仍严格执行自己的摘要或 updater 签名。Claude 稳定重定向继续受 Cloudflare challenge 阻断；Hermes Apple Silicon DMG 是尚未建模最终桌面/runtime 状态的 vendor bootstrap。完整证据见 [macOS 功能链路审计](evidence/macos-functional-parity-audit-2026-08-08.md) 和 [实现状态](docs/implementation-status.md)。
 
 ## 安全边界
 
@@ -89,18 +89,18 @@ macOS 目前的禁用不是功能降级：它是刻意的 fail-closed 状态。�
 - 不执行服务器返回的 PowerShell、Shell 或安装参数；平台命令均由本地编译代码构造。
 - 下载在私有临时目录进行，限制重定向、文件名和大小；完整 URL、用户目录和临时目录会从操作日志中脱敏。
 - Windows 使用固定系统工具、Authenticode/AppX 身份和架构检查；ChatGPT 不会偷偷回退到 Store、WinGet、引导器或登录页。
-- macOS 固定 Applications 中的应用名、Bundle ID、Developer Team ID、主 Mach-O slice、codesign 和 Gatekeeper 结果；不清除 quarantine。
+- macOS 固定 Applications 中的应用名、Bundle ID、Developer Team ID、主 Mach-O slice、codesign 和 Gatekeeper 结果；CC Switch 验证 minisign，ChatGPT 验证 Sparkle Ed25519；不清除 quarantine。
 - 任一验证缺失、身份变化或版本合同变化时，默认停止并给出原因。
 
 ## 支持的客户端
 
 | 客户端 | Windows 分发策略 | macOS 分发策略 |
 | --- | --- | --- |
-| WorkBuddy | 官方更新接口 + Authenticode / 最终 EXE 复检 | 官方架构 ZIP + SHA-256 + Bundle/Team ID 复检 |
+| WorkBuddy | 官方更新接口 + Authenticode / 最终 EXE 复检 | 官方架构 ZIP + Apple codesign/Gatekeeper + Bundle/Team/版本/架构复检 |
 | Hermes Agent | 官方 bootstrap，桌面与 runtime 状态分离 | Apple Silicon DMG bootstrap；Intel 明确不支持 |
 | CC Switch | 官方 `latest.json` + minisign + MSI | 官方签名 `tar.gz` + minisign + `.app` 复检 |
 | Claude Desktop | 官方 MSIX | 官方 Universal DMG |
-| ChatGPT | OpenAI 官方清单 + 完整 MSIX | OpenAI 官方 Intel / Apple Silicon appcast ZIP |
+| ChatGPT | OpenAI 官方清单 + 完整 MSIX | OpenAI 官方 Intel / Apple Silicon appcast ZIP + Sparkle Ed25519 |
 
 “支持”描述的是已编码的安全合同，不代表某个平台已绕过所有发布验证 Gate。点击操作仅在对应信任条目和平台证据都闭合后才会变为可用。
 
@@ -121,6 +121,7 @@ cargo check --all-targets --target aarch64-apple-darwin
 - [完整安装指南](docs/installation.md)：正式发行版、本地构建、验证 DMG 和校验方法。
 - [GitHub 首页设计记录](docs/github-homepage-design.md)：对 Ollama、Tauri、LocalSend、RustDesk 的主页模式调研与本仓库取舍。
 - [实现与验证状态](docs/implementation-status.md)：已完成能力、可复现实证与未关闭 Gate。
+- [macOS 功能链路审计](evidence/macos-functional-parity-audit-2026-08-08.md)：Windows/macOS 阶段对照、双架构完整包、激活/回滚和当前支持矩阵。
 - [easy agent macOS 品牌构建证据](evidence/easy-agent-branding-macos-proof-2026-08-04.md)：新图标、Universal DMG、签名、挂载和 Intel 启动验证。
 - [维护手册](docs/maintenance.md)：更新信任根、官方来源和平台证据时必须遵守的规则。
 - [参与贡献](CONTRIBUTING.md)：测试要求、文档规范与安全变更流程。

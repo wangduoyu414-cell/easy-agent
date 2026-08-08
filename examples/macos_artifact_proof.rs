@@ -2,8 +2,11 @@ use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use easy_agent::adapters::resolve_install_plan;
 use easy_agent::core::{
-    Architecture, OperatingSystem, ProductId, TrustRegistry, verify_minisign_file,
+    Architecture, DownloadRequest, InstallPlan, OperatingSystem, PlatformInfo, ProductId,
+    RemoteDigestPolicy, TrustRegistry, download_to_private_staging,
+    verify_configured_updater_signature_file, version_is_older_for_product,
 };
 use easy_agent::platform;
 
@@ -29,9 +32,9 @@ fn run() -> Result<(), String> {
             .next()
             .ok_or_else(|| usage("missing architecture"))?,
     )?;
-    let target = arguments
-        .next()
-        .ok_or_else(|| usage("missing artifact path or --installed"))?;
+    let target = arguments.next().ok_or_else(|| {
+        usage("missing artifact path, --installed, --preflight, or --download-verify")
+    })?;
     if arguments.next().is_some() {
         return Err(usage("unexpected extra argument"));
     }
@@ -62,6 +65,93 @@ fn run() -> Result<(), String> {
         println!("evidence={}", detection.evidence);
         return Ok(());
     }
+    if target == "--preflight" {
+        platform::preflight_direct_install(&trust, architecture)?;
+        println!("product={}", product.key());
+        println!("architecture={}", architecture.key());
+        println!("preflight=ready");
+        return Ok(());
+    }
+    if target == "--download-verify" {
+        let current = platform::current_platform();
+        let platform = PlatformInfo {
+            os: OperatingSystem::MacOs,
+            architecture,
+            os_version: current.os_version,
+            description: "macOS artifact proof".into(),
+        };
+        let InstallPlan::DirectPackage(candidate) =
+            resolve_install_plan(product, &platform, &registry)
+                .map_err(|error| error.to_string())?
+        else {
+            return Err("the product did not resolve to a direct package".into());
+        };
+        let file_name = format!(
+            "{}-proof.{}",
+            product.key(),
+            candidate.package_kind.extension()
+        );
+        let download = download_to_private_staging(&DownloadRequest {
+            url: candidate.download_url.clone(),
+            file_name,
+            trust: &trust,
+        })
+        .map_err(|error| format!("artifact download failed: {error}"))?;
+        let remote_digest_matches = candidate
+            .expected_sha256
+            .as_deref()
+            .map(|expected| download.identity.sha256.eq_ignore_ascii_case(expected));
+        if remote_digest_matches == Some(false)
+            && trust.remote_digest_policy == RemoteDigestPolicy::EnforceIfPresent
+        {
+            return Err("official digest does not match the downloaded artifact".into());
+        }
+        let signature_verified = verify_configured_updater_signature_file(
+            &download.staged_path,
+            trust.updater_public_key.as_deref(),
+            trust.sparkle_ed25519_public_key.as_deref(),
+            candidate.detached_signature.as_deref(),
+        )
+        .map_err(|error| format!("updater signature verification failed: {error}"))?;
+        let verification = platform::verify_artifact(
+            &download.staged_path,
+            candidate.package_kind,
+            &trust,
+            architecture,
+            signature_verified,
+        )?;
+        let artifact_version = verification
+            .version
+            .as_deref()
+            .ok_or_else(|| "artifact has no verifiable version".to_owned())?;
+        let versions_match =
+            !version_is_older_for_product(product, artifact_version, &candidate.version)
+                && !version_is_older_for_product(product, &candidate.version, artifact_version);
+        if !versions_match {
+            return Err(format!(
+                "artifact version mismatch: expected {}, got {:?}",
+                candidate.version, verification.version
+            ));
+        }
+        println!("product={}", product.key());
+        println!("architecture={}", architecture.key());
+        println!("version={}", candidate.version);
+        println!("sha256={}", download.identity.sha256);
+        println!(
+            "remote_digest_matches={}",
+            remote_digest_matches
+                .map(|matches| matches.to_string())
+                .unwrap_or_else(|| "not_provided".into())
+        );
+        println!("updater_signature_verified={signature_verified}");
+        println!("platform_verification=passed");
+        println!("bundle_id={}", verification.product_identity);
+        println!(
+            "team_id={}",
+            verification.signer_subject.as_deref().unwrap_or("<none>")
+        );
+        return Ok(());
+    }
 
     let artifact = PathBuf::from(target);
 
@@ -77,15 +167,17 @@ fn run() -> Result<(), String> {
         [] => return Err("the trust entry has no package kind".into()),
         _ => return Err("the trust entry has multiple package kinds".into()),
     };
-    let updater_signature_verified = match trust.updater_public_key.as_deref() {
-        Some(public_key) => {
-            let signature = required_environment("MACOS_PROOF_SIGNATURE")?;
-            verify_minisign_file(&artifact, public_key, &signature)
-                .map_err(|error| format!("updater signature verification failed: {error}"))?;
-            true
-        }
-        None => false,
-    };
+    let signature = (trust.updater_public_key.is_some()
+        || trust.sparkle_ed25519_public_key.is_some())
+    .then(|| required_environment("MACOS_PROOF_SIGNATURE"))
+    .transpose()?;
+    let updater_signature_verified = verify_configured_updater_signature_file(
+        &artifact,
+        trust.updater_public_key.as_deref(),
+        trust.sparkle_ed25519_public_key.as_deref(),
+        signature.as_deref(),
+    )
+    .map_err(|error| format!("updater signature verification failed: {error}"))?;
 
     let verification = platform::verify_artifact(
         &artifact,
@@ -152,6 +244,6 @@ fn required_environment(name: &str) -> Result<String, String> {
 
 fn usage(message: &str) -> String {
     format!(
-        "{message}; usage: cargo run --example macos_artifact_proof -- <product> <x64|arm64> <artifact-path|--installed>"
+        "{message}; usage: cargo run --example macos_artifact_proof -- <product> <x64|arm64> <artifact-path|--installed|--preflight|--download-verify>"
     )
 }
