@@ -1,4 +1,4 @@
-name: Build macOS Universal validation DMG
+name: Build easy agent macOS Universal validation DMG
 
 on:
   workflow_dispatch:
@@ -18,6 +18,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
+          components: rustfmt,clippy
 
       - name: Cache Rust build inputs
         uses: actions/cache@v4
@@ -35,17 +36,17 @@ jobs:
 
       - name: Record architecture and signatures
         run: |
-          lipo -info "dist/AI Client Installer.app/Contents/MacOS/ai-client-installer"
-          codesign --verify --deep --strict --verbose=2 "dist/AI Client Installer.app"
-          codesign --verify --verbose=2 "dist/AI-Client-Installer-macos-universal.dmg"
-          shasum -a 256 "dist/AI-Client-Installer-macos-universal.dmg"
+          lipo -info "dist/easy agent.app/Contents/MacOS/easy-agent"
+          codesign --verify --deep --strict --verbose=2 "dist/easy agent.app"
+          codesign --verify --verbose=2 "dist/easy-agent-macos-universal.dmg"
+          shasum -a 256 "dist/easy-agent-macos-universal.dmg"
 
       - name: Upload validation DMG
         uses: actions/upload-artifact@v6
         with:
-          name: AI-Client-Installer-macos-universal-validation
+          name: easy-agent-macos-universal-validation
           path: |
-            dist/AI-Client-Installer-macos-universal.dmg
+            dist/easy-agent-macos-universal.dmg
             dist/SHA256SUMS-macos-universal.txt
           if-no-files-found: error
           retention-days: 7

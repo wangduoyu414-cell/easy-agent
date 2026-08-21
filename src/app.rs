@@ -347,18 +347,24 @@ impl eframe::App for InstallerApp {
                 |ui| {
                     ui.add_space(28.0);
                     ui.vertical_centered(|ui| {
-                        ui.label(
-                            RichText::new("客户端下载")
-                                .size(34.0)
-                                .strong()
-                                .color(Color32::from_rgb(18, 22, 29)),
-                        );
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new("选择需要安装的客户端")
-                                .size(16.0)
-                                .color(Color32::from_rgb(154, 158, 166)),
-                        );
+                        ui.horizontal(|ui| {
+                            draw_brand_icon(ui, 42.0);
+                            ui.add_space(10.0);
+                            ui.vertical(|ui| {
+                                ui.label(
+                                    RichText::new("easy agent")
+                                        .size(30.0)
+                                        .strong()
+                                        .color(Color32::from_rgb(18, 22, 29)),
+                                );
+                                ui.add_space(3.0);
+                                ui.label(
+                                    RichText::new("安全地安装与更新 AI 客户端")
+                                        .size(15.0)
+                                        .color(Color32::from_rgb(154, 158, 166)),
+                                );
+                            });
+                        });
                     });
                     ui.add_space(28.0);
 
@@ -649,7 +655,11 @@ fn draw_product_row(
                     },
                 ))
                 .corner_radius(6.0);
-                if ui.add_enabled(enabled, button).clicked() {
+                let mut response = ui.add_enabled(enabled, button);
+                if let Some(detail) = view.support.detail() {
+                    response = response.on_hover_text(detail);
+                }
+                if response.clicked() {
                     clicked = true;
                 }
             });
@@ -693,16 +703,10 @@ fn product_subtitle(view: &ProductView, scanning: bool, batch_running: bool) -> 
                 (false, _) => "由 Microsoft 官方服务安装最新版本".into(),
             }
         }
-        None if matches!(view.support, SupportState::Unsupported(_)) => {
-            "当前系统或架构不支持".into()
-        }
-        None if view.detection.installed => view
-            .detection
-            .version
-            .as_deref()
-            .map(|version| format!("已安装 {version}"))
-            .unwrap_or_else(|| "已检测到安装".into()),
-        None => "官方版本信息暂不可用".into(),
+        None => match &view.support {
+            SupportState::Disabled(reason) | SupportState::Unsupported(reason) => reason.clone(),
+            SupportState::Ready => view.status_line.clone(),
+        },
     }
 }
 
@@ -781,34 +785,65 @@ fn draw_product_icon(ui: &mut egui::Ui, product: ProductId) {
     );
 }
 
-fn install_system_font(context: &egui::Context) {
-    let candidates = [
-        r"C:\Windows\Fonts\msyh.ttc",
-        r"C:\Windows\Fonts\msyh.ttf",
-        "/System/Library/Fonts/PingFang.ttc",
-    ];
-    let Some((_, bytes)) = candidates
-        .iter()
-        .find_map(|path| fs::read(path).ok().map(|bytes| (*path, bytes)))
+fn draw_brand_icon(ui: &mut egui::Ui, size: f32) {
+    ui.add(
+        egui::Image::new(egui::include_image!(
+            "../assets/branding/easy-agent-icon-512.png"
+        ))
+        .fit_to_exact_size(egui::vec2(size, size))
+        .maintain_aspect_ratio(true),
+    );
+}
+
+#[cfg(target_os = "windows")]
+const SYSTEM_CJK_FONT_CANDIDATES: &[(&str, u32)] = &[
+    (r"C:\Windows\Fonts\msyh.ttc", 0),
+    (r"C:\Windows\Fonts\msyh.ttf", 0),
+    (r"C:\Windows\Fonts\simhei.ttf", 0),
+    (r"C:\Windows\Fonts\simsun.ttc", 0),
+];
+
+#[cfg(target_os = "macos")]
+const SYSTEM_CJK_FONT_CANDIDATES: &[(&str, u32)] = &[
+    ("/System/Library/Fonts/PingFang.ttc", 0),
+    ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
+    ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
+    ("/System/Library/Fonts/STHeiti Light.ttc", 0),
+    ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+];
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+const SYSTEM_CJK_FONT_CANDIDATES: &[(&str, u32)] = &[];
+
+fn install_system_font(context: &egui::Context) -> bool {
+    let Some((_, bytes, face_index)) =
+        SYSTEM_CJK_FONT_CANDIDATES
+            .iter()
+            .find_map(|(path, face_index)| {
+                fs::read(path).ok().map(|bytes| (*path, bytes, *face_index))
+            })
     else {
-        return;
+        return false;
     };
 
     let mut fonts = FontDefinitions::default();
+    let mut font_data = FontData::from_owned(bytes);
+    font_data.index = face_index;
     fonts
         .font_data
-        .insert("system-cjk".into(), FontData::from_owned(bytes).into());
+        .insert("system-cjk".into(), font_data.into());
     fonts
         .families
         .entry(FontFamily::Proportional)
         .or_default()
-        .insert(0, "system-cjk".into());
+        .push("system-cjk".into());
     fonts
         .families
         .entry(FontFamily::Monospace)
         .or_default()
-        .insert(0, "system-cjk".into());
+        .push("system-cjk".into());
     context.set_fonts(fonts);
+    true
 }
 
 #[cfg(test)]
@@ -951,6 +986,37 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_products_show_the_exact_support_reason() {
+        let mut view = workbuddy_view();
+        view.install_plan = None;
+        view.support = SupportState::Disabled("官方摘要与下载文件不一致，安装保持禁用".into());
+        view.detection = Detection {
+            installed: true,
+            version: Some("5.3.8".into()),
+            ..Detection::absent("fixture")
+        };
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "官方摘要与下载文件不一致，安装保持禁用"
+        );
+        assert_eq!(product_action(&view, false, false), ("待验证", false));
+
+        view.support = SupportState::Unsupported("厂商明确不支持 Intel Mac".into());
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "厂商明确不支持 Intel Mac"
+        );
+        assert_eq!(product_action(&view, false, false), ("不支持", false));
+
+        view.support = SupportState::Ready;
+        view.status_line = "已安装 5.3.8 · 版本解析：server returned HTTP 403".into();
+        assert_eq!(
+            product_subtitle(&view, false, false),
+            "已安装 5.3.8 · 版本解析：server returned HTTP 403"
+        );
+    }
+
+    #[test]
     fn workbuddy_registered_release_version_matches_the_full_api_build_version() {
         let mut view = workbuddy_view();
         view.detection = Detection {
@@ -1042,5 +1108,24 @@ mod tests {
             app.batch_summary.as_deref(),
             Some("批次完成：成功 0，失败 1，结果待复检 0，取消 0 · 操作日志不可用：access denied")
         );
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    #[test]
+    fn system_font_fallback_contains_required_chinese_glyphs() {
+        let context = egui::Context::default();
+        assert!(install_system_font(&context));
+
+        let mut contains_required_glyphs = false;
+        let _ = context.run_ui(egui::RawInput::default(), |ui| {
+            contains_required_glyphs = ui.ctx().fonts_mut(|fonts| {
+                fonts.has_glyphs(
+                    &egui::FontId::proportional(16.0),
+                    "正在检测安装状态与官方版本更新不可用",
+                )
+            });
+        });
+
+        assert!(contains_required_glyphs);
     }
 }

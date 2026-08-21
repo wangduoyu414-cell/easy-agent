@@ -2,11 +2,15 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-dist_dir="$repo_root/dist"
-app_name="AI Client Installer"
+dist_dir="${EASY_AGENT_DIST_DIR:-$repo_root/dist}"
+if [[ "$dist_dir" != /* ]]; then
+  dist_dir="$repo_root/$dist_dir"
+fi
+app_name="easy agent"
 bundle_dir="$dist_dir/$app_name.app"
-binary_name="ai-client-installer"
-dmg_path="$dist_dir/AI-Client-Installer-macos-universal.dmg"
+binary_name="easy-agent"
+icon_name="easy-agent.icns"
+dmg_path="$dist_dir/easy-agent-macos-universal.dmg"
 unsigned_build="${ALLOW_UNSIGNED_MACOS_BUILD:-0}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -28,13 +32,28 @@ fi
 rustup target add x86_64-apple-darwin aarch64-apple-darwin
 cargo test --all-targets
 cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
 cargo build --release --target x86_64-apple-darwin
 cargo build --release --target aarch64-apple-darwin
 
-rm -rf "$bundle_dir"
-rm -f "$dmg_path"
+mkdir -p "$dist_dir"
+if [[ -e "$bundle_dir" ]]; then
+  if [[ ! -d "$bundle_dir" || -L "$bundle_dir" ]]; then
+    echo "Refusing to replace a non-directory app bundle: $bundle_dir" >&2
+    exit 1
+  fi
+  rm -R -- "$bundle_dir"
+fi
+if [[ -e "$dmg_path" ]]; then
+  if [[ ! -f "$dmg_path" || -L "$dmg_path" ]]; then
+    echo "Refusing to replace a non-regular DMG: $dmg_path" >&2
+    exit 1
+  fi
+  rm -- "$dmg_path"
+fi
 mkdir -p "$bundle_dir/Contents/MacOS" "$bundle_dir/Contents/Resources"
 cp "$repo_root/packaging/macos/Info.plist" "$bundle_dir/Contents/Info.plist"
+cp "$repo_root/packaging/macos/$icon_name" "$bundle_dir/Contents/Resources/$icon_name"
 /usr/bin/plutil -replace CFBundleShortVersionString -string "$version" "$bundle_dir/Contents/Info.plist"
 /usr/bin/plutil -replace CFBundleVersion -string "$version" "$bundle_dir/Contents/Info.plist"
 lipo -create \

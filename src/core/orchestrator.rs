@@ -5,13 +5,15 @@ use std::time::Duration;
 
 use crate::platform::{
     ArtifactVerification, StoreInstallError, StoreInstallRequest, VerifiedInstallRequest,
-    detect_product, execute_microsoft_store_install, execute_verified_installer, verify_artifact,
+    detect_product, execute_microsoft_store_install, execute_verified_installer,
+    preflight_direct_install, verify_artifact,
 };
 
 use super::{
     Detection, DownloadControl, DownloadRequest, InstallPlan, OperationState, OperationUpdate,
-    PackageKind, PlatformInfo, ProductOperationResult, ReleaseCandidate, TrustRegistry,
-    download_to_private_staging_controlled, verify_minisign_file,
+    PackageKind, PlatformInfo, ProductOperationResult, ReleaseCandidate, RemoteDigestPolicy,
+    TrustRegistry, download_to_private_staging_controlled,
+    verify_configured_updater_signature_file,
 };
 
 const DIRECT_POSTCHECK_ATTEMPTS: usize = 46;
@@ -157,6 +159,8 @@ fn install_direct_package(
         PreinstallDecision::AlreadyCurrent(message) => return Ok(message),
         PreinstallDecision::Reject(message) => return Err(InstallOneError::Failed(message)),
     }
+    preflight_direct_install(trust, candidate.architecture)
+        .map_err(|error| InstallOneError::Failed(format!("安装前检查失败：{error}")))?;
 
     let safe_version: String = candidate
         .version
@@ -219,27 +223,22 @@ fn install_direct_package(
         OperationState::Verifying,
         "正在核对摘要、平台签名、产品身份和架构",
     );
-    if let Some(expected) = candidate.expected_sha256.as_deref()
-        && !download.identity.sha256.eq_ignore_ascii_case(expected)
+    if let Some(warning) = evaluate_remote_digest(
+        trust.remote_digest_policy,
+        candidate.expected_sha256.as_deref(),
+        &download.identity.sha256,
+    )
+    .map_err(InstallOneError::Failed)?
     {
-        return Err(InstallOneError::Failed("官方摘要不匹配".into()));
+        emit(on_update, candidate, OperationState::Verifying, warning);
     }
-    let updater_signature_verified = match (
+    let updater_signature_verified = verify_configured_updater_signature_file(
+        &download.staged_path,
         trust.updater_public_key.as_deref(),
+        trust.sparkle_ed25519_public_key.as_deref(),
         candidate.detached_signature.as_deref(),
-    ) {
-        (Some(public_key), Some(signature)) => {
-            verify_minisign_file(&download.staged_path, public_key, signature)
-                .map_err(|error| InstallOneError::Failed(format!("更新器签名验证失败：{error}")))?;
-            true
-        }
-        (None, None) => false,
-        _ => {
-            return Err(InstallOneError::Failed(
-                "信任注册表公钥与候选包签名不完整".into(),
-            ));
-        }
-    };
+    )
+    .map_err(|error| InstallOneError::Failed(format!("更新器签名验证失败：{error}")))?;
     let verification = verify_artifact(
         &download.staged_path,
         candidate.package_kind,
@@ -287,7 +286,10 @@ fn install_direct_package(
         private_root: download.private_root.path(),
         path: &download.staged_path,
         verified_identity: &download.identity,
-        expected_sha256: candidate.expected_sha256.as_deref(),
+        expected_sha256: match trust.remote_digest_policy {
+            RemoteDigestPolicy::EnforceIfPresent => candidate.expected_sha256.as_deref(),
+            RemoteDigestPolicy::PlatformSignatureOnly => None,
+        },
         kind: candidate.package_kind,
         trust,
         expected_architecture: candidate.architecture,
@@ -332,6 +334,25 @@ fn install_direct_package(
         || detect_product(candidate.product, Some(trust)),
         thread::sleep,
     )
+}
+
+fn evaluate_remote_digest(
+    policy: RemoteDigestPolicy,
+    expected: Option<&str>,
+    actual: &str,
+) -> Result<Option<&'static str>, String> {
+    let Some(expected) = expected else {
+        return Ok(None);
+    };
+    if actual.eq_ignore_ascii_case(expected) {
+        return Ok(None);
+    }
+    match policy {
+        RemoteDigestPolicy::EnforceIfPresent => Err("官方摘要不匹配".into()),
+        RemoteDigestPolicy::PlatformSignatureOnly => Ok(Some(
+            "厂商提供的 SHA-256 与下载文件不一致；按 WorkBuddy macOS 专用策略继续验证 Apple 签名和应用身份",
+        )),
+    }
 }
 
 enum DirectPostcheckDecision {
@@ -604,11 +625,12 @@ mod tests {
     use url::Url;
 
     use super::{
-        InstallOneError, verify_candidate_artifact_version, wait_for_direct_postcheck_with,
+        InstallOneError, evaluate_remote_digest, verify_candidate_artifact_version,
+        wait_for_direct_postcheck_with,
     };
     use crate::core::{
         Architecture, Detection, OperatingSystem, PackageKind, ProductId, ReleaseCandidate,
-        TrustRegistry,
+        RemoteDigestPolicy, TrustRegistry,
     };
     use crate::platform::ArtifactVerification;
 
@@ -668,6 +690,33 @@ mod tests {
         }
     }
 
+    fn cc_switch_macos_candidate() -> ReleaseCandidate {
+        ReleaseCandidate {
+            product: ProductId::CcSwitch,
+            version: "3.19.1".into(),
+            architecture: Architecture::X64,
+            package_kind: PackageKind::TarGz,
+            download_url: Url::parse("https://dl.ccswitch.io/v3.19.1/CC-Switch-macOS.tar.gz")
+                .unwrap(),
+            expected_sha256: None,
+            detached_signature: Some("untrusted comment: fixture".into()),
+        }
+    }
+
+    fn cc_switch_macos_detection() -> Detection {
+        Detection {
+            installed: true,
+            version: Some("3.19.1".into()),
+            managed: false,
+            management_known: true,
+            package_identity: Some("com.ccswitch.desktop".into()),
+            package_family: None,
+            publisher: Some("R8UR22V2F9".into()),
+            architecture: Some(Architecture::X64),
+            evidence: "用户 Applications · 已通过 Bundle/签名/Gatekeeper 检查".into(),
+        }
+    }
+
     #[test]
     fn direct_postcheck_waits_for_the_target_version() {
         let candidate = workbuddy_candidate();
@@ -696,6 +745,35 @@ mod tests {
         .unwrap();
         assert_eq!(result, "复检成功：5.3.8");
         assert_eq!(waits, 2);
+    }
+
+    #[test]
+    fn workbuddy_macos_digest_policy_keeps_platform_verification_but_other_entries_fail() {
+        assert!(
+            evaluate_remote_digest(
+                RemoteDigestPolicy::EnforceIfPresent,
+                Some("expected"),
+                "actual"
+            )
+            .is_err()
+        );
+        let warning = evaluate_remote_digest(
+            RemoteDigestPolicy::PlatformSignatureOnly,
+            Some("expected"),
+            "actual",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(warning.contains("WorkBuddy macOS"));
+        assert_eq!(
+            evaluate_remote_digest(
+                RemoteDigestPolicy::PlatformSignatureOnly,
+                Some("same"),
+                "SAME"
+            )
+            .unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -844,5 +922,91 @@ mod tests {
             error,
             InstallOneError::Failed(message) if message.contains("publisher")
         ));
+    }
+
+    #[test]
+    fn macos_postcheck_requires_exact_bundle_team_architecture_and_version() {
+        let candidate = cc_switch_macos_candidate();
+        let registry = TrustRegistry::embedded().unwrap();
+        let trust = registry
+            .find(
+                ProductId::CcSwitch,
+                OperatingSystem::MacOs,
+                Architecture::X64,
+            )
+            .unwrap();
+
+        let artifact = ArtifactVerification {
+            signer_subject: Some("R8UR22V2F9".into()),
+            product_identity: "com.ccswitch.desktop".into(),
+            version: Some(candidate.version.clone()),
+            architecture: Some(candidate.architecture),
+        };
+        verify_candidate_artifact_version(&candidate, &artifact).unwrap();
+
+        let result = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            cc_switch_macos_detection,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(result, "复检成功：3.19.1");
+
+        let mut wrong_bundle = cc_switch_macos_detection();
+        wrong_bundle.package_identity = Some("com.example.other".into());
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_bundle.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("Bundle ID")
+        ));
+
+        let mut wrong_team = cc_switch_macos_detection();
+        wrong_team.publisher = Some("UNEXPECTED".into());
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_team.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("Team ID")
+        ));
+
+        let mut wrong_architecture = cc_switch_macos_detection();
+        wrong_architecture.architecture = Some(Architecture::Arm64);
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_architecture.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("应用架构")
+        ));
+
+        let changed_artifact = ArtifactVerification {
+            version: Some("3.19.0".into()),
+            ..artifact
+        };
+        assert!(verify_candidate_artifact_version(&candidate, &changed_artifact).is_err());
     }
 }

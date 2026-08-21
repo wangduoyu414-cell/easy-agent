@@ -38,7 +38,7 @@ pub fn safe_http_client() -> Result<Client, reqwest::Error> {
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(20))
         .timeout(Duration::from_secs(60))
-        .user_agent(concat!("ai-client-installer/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("easy-agent/", env!("CARGO_PKG_VERSION")))
         .build()
 }
 

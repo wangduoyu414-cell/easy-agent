@@ -3,12 +3,13 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
-use ai_client_installer::core::{
-    Architecture, Detection, DistributionKind, InstallPlan, OperatingSystem, PackageKind,
-    PlatformInfo, PreinstallDecision, ProductId, ReleaseCandidate, TrustRegistry, WindowsPeMachine,
-    assess_existing_install, assess_existing_install_for_product, ensure_allowed_url,
-    inspect_staged_file, run_install_batch, validate_staged_file_name, verify_minisign_file,
-    verify_staged_identity, version_is_older, version_is_older_for_product,
+use easy_agent::core::{
+    Architecture, Detection, DistributionKind, InstallPlan, MacOsInstallStrategy, OperatingSystem,
+    PackageKind, PlatformInfo, PreinstallDecision, ProductId, ReleaseCandidate, RemoteDigestPolicy,
+    TrustRegistry, WindowsPeMachine, assess_existing_install, assess_existing_install_for_product,
+    ensure_allowed_url, inspect_staged_file, run_install_batch, validate_staged_file_name,
+    verify_configured_updater_signature_file, verify_minisign_file, verify_staged_identity,
+    version_is_older, version_is_older_for_product,
 };
 use tempfile::tempdir;
 use url::Url;
@@ -17,7 +18,7 @@ use url::Url;
 use std::os::unix::fs::symlink;
 
 #[cfg(windows)]
-use ai_client_installer::platform::plan_install_command;
+use easy_agent::platform::plan_install_command;
 
 #[test]
 fn embedded_registry_enables_the_configured_windows_x64_strategies() {
@@ -91,27 +92,43 @@ fn embedded_registry_enables_the_configured_windows_x64_strategies() {
 }
 
 #[test]
-fn embedded_registry_models_both_macos_architectures_fail_closed() {
+fn embedded_registry_models_the_explicit_macos_support_matrix() {
     let registry = TrustRegistry::embedded().unwrap();
     for architecture in [Architecture::X64, Architecture::Arm64] {
         for product in [
             ProductId::WorkBuddy,
             ProductId::CcSwitch,
-            ProductId::Claude,
             ProductId::ChatGpt,
         ] {
             let entry = registry
                 .find(product, OperatingSystem::MacOs, architecture)
                 .unwrap();
             assert!(
-                !entry.enabled,
-                "{product:?}/{architecture:?} must remain gated"
+                entry.enabled,
+                "{product:?}/{architecture:?} should be installable"
+            );
+            assert_eq!(
+                entry.macos_install_strategy,
+                Some(MacOsInstallStrategy::DirectAppBundle)
             );
         }
+        let product = ProductId::Claude;
+        let entry = registry
+            .find(product, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert!(
+            !entry.enabled,
+            "{product:?}/{architecture:?} must remain gated"
+        );
+        assert!(!entry.unsupported);
+        assert_eq!(
+            entry.macos_install_strategy,
+            Some(MacOsInstallStrategy::DirectAppBundle)
+        );
     }
     assert!(matches!(
         registry.support_state(ProductId::Hermes, OperatingSystem::MacOs, Architecture::X64),
-        ai_client_installer::core::SupportState::Unsupported(_)
+        easy_agent::core::SupportState::Unsupported(_)
     ));
     let chatgpt = registry
         .find(
@@ -121,6 +138,74 @@ fn embedded_registry_models_both_macos_architectures_fail_closed() {
         )
         .unwrap();
     assert_eq!(chatgpt.minimum_macos_version.as_deref(), Some("14.0"));
+    for architecture in [Architecture::X64, Architecture::Arm64] {
+        let cc_switch = registry
+            .find(ProductId::CcSwitch, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            cc_switch.macos_bundle_id.as_deref(),
+            Some("com.ccswitch.desktop")
+        );
+        assert_eq!(cc_switch.macos_team_id.as_deref(), Some("R8UR22V2F9"));
+
+        let workbuddy = registry
+            .find(ProductId::WorkBuddy, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            workbuddy.macos_application_name.as_deref(),
+            Some("WorkBuddy.app")
+        );
+        assert_eq!(
+            workbuddy.macos_bundle_id.as_deref(),
+            Some("com.workbuddy.workbuddy")
+        );
+        assert_eq!(workbuddy.macos_team_id.as_deref(), Some("FN2V63AD2J"));
+        assert_eq!(
+            workbuddy.remote_digest_policy,
+            RemoteDigestPolicy::PlatformSignatureOnly
+        );
+
+        let chatgpt = registry
+            .find(ProductId::ChatGpt, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            chatgpt.macos_application_name.as_deref(),
+            Some("ChatGPT.app")
+        );
+        assert_eq!(chatgpt.macos_bundle_id.as_deref(), Some("com.openai.codex"));
+        assert_eq!(chatgpt.macos_team_id.as_deref(), Some("2DC432GLL2"));
+        assert_eq!(
+            chatgpt.sparkle_ed25519_public_key.as_deref(),
+            Some("mNfr1v9t63BfgDtlw4C8lRvSY6uMggIXABDOCi3tS6k=")
+        );
+
+        let claude = registry
+            .find(ProductId::Claude, OperatingSystem::MacOs, architecture)
+            .unwrap();
+        assert_eq!(
+            claude.macos_bundle_id.as_deref(),
+            Some("com.anthropic.claudefordesktop")
+        );
+        assert_eq!(claude.macos_team_id.as_deref(), Some("Q6L2SF6YDW"));
+    }
+    let hermes = registry
+        .find(
+            ProductId::Hermes,
+            OperatingSystem::MacOs,
+            Architecture::Arm64,
+        )
+        .unwrap();
+    assert_eq!(hermes.macos_application_name.as_deref(), Some("Hermes.app"));
+    assert_eq!(
+        hermes.macos_bundle_id.as_deref(),
+        Some("com.nousresearch.hermes.setup")
+    );
+    assert_eq!(hermes.macos_team_id.as_deref(), Some("T2F6S8MF7C"));
+    assert_eq!(
+        hermes.macos_install_strategy,
+        Some(MacOsInstallStrategy::VendorBootstrap)
+    );
+    assert!(!hermes.enabled);
 }
 
 #[test]
@@ -136,8 +221,76 @@ status_reason = "fixture"
 entry_urls = ["https://downloads.claude.ai/client.dmg"]
 url_rules = [{ host = "downloads.claude.ai", exact_paths = ["/client.dmg"] }]
 package_kinds = ["dmg"]
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "Claude.app"
 macos_bundle_id = "com.anthropic.claudefordesktop"
+minimum_macos_version = "12.0"
+"#;
+    assert!(TrustRegistry::parse(source).is_err());
+}
+
+#[test]
+fn enabled_macos_entry_requires_an_implemented_direct_app_strategy() {
+    let source = r#"
+schema_version = 1
+[[entries]]
+product = "hermes"
+os = "macos"
+architecture = "arm64"
+enabled = true
+status_reason = "fixture"
+entry_urls = ["https://hermes-assets.nousresearch.com/Hermes-Setup.dmg"]
+url_rules = [{ host = "hermes-assets.nousresearch.com", exact_paths = ["/Hermes-Setup.dmg"] }]
+package_kinds = ["dmg"]
+macos_install_strategy = "vendor_bootstrap"
+macos_application_name = "Hermes.app"
+macos_bundle_id = "com.nousresearch.hermes.setup"
+macos_team_id = "T2F6S8MF7C"
+minimum_macos_version = "12.0"
+"#;
+    assert!(TrustRegistry::parse(source).is_err());
+}
+
+#[test]
+fn enabled_chatgpt_macos_entry_requires_the_pinned_sparkle_key() {
+    let source = r#"
+schema_version = 1
+[[entries]]
+product = "chat_gpt"
+os = "macos"
+architecture = "x64"
+enabled = true
+status_reason = "fixture"
+entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml"]
+url_rules = [{ host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/appcast-x64.xml"] }]
+package_kinds = ["zip"]
+macos_install_strategy = "direct_app_bundle"
+macos_application_name = "ChatGPT.app"
+macos_bundle_id = "com.openai.codex"
+macos_team_id = "2DC432GLL2"
+minimum_macos_version = "14.0"
+"#;
+    assert!(TrustRegistry::parse(source).is_err());
+}
+
+#[test]
+fn platform_signature_only_digest_policy_is_limited_to_workbuddy_macos_identity() {
+    let source = r#"
+schema_version = 1
+[[entries]]
+product = "cc_switch"
+os = "macos"
+architecture = "x64"
+enabled = false
+status_reason = "fixture"
+entry_urls = ["https://dl.ccswitch.io/client.zip"]
+url_rules = [{ host = "dl.ccswitch.io", exact_paths = ["/client.zip"] }]
+package_kinds = ["zip"]
+remote_digest_policy = "platform_signature_only"
+macos_install_strategy = "direct_app_bundle"
+macos_application_name = "CC Switch.app"
+macos_bundle_id = "com.ccswitch.desktop"
+macos_team_id = "R8UR22V2F9"
 minimum_macos_version = "12.0"
 "#;
     assert!(TrustRegistry::parse(source).is_err());
@@ -157,6 +310,8 @@ status_reason = "fixture"
 entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/appcast.xml"]
 url_rules = [{ host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/appcast.xml"] }]
 package_kinds = ["zip"]
+sparkle_ed25519_public_key = "mNfr1v9t63BfgDtlw4C8lRvSY6uMggIXABDOCi3tS6k="
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "ChatGPT.app"
 macos_bundle_id = "com.openai.codex"
 macos_team_id = "ABCDE12345"
@@ -172,7 +327,7 @@ minimum_macos_version = "14.0"
     };
     assert!(matches!(
         registry.support_state_for_platform(ProductId::ChatGpt, &platform),
-        ai_client_installer::core::SupportState::Unsupported(_)
+        easy_agent::core::SupportState::Unsupported(_)
     ));
 }
 
@@ -356,7 +511,7 @@ fn installer_paths_are_passed_as_literal_process_arguments() {
     assert!(
         msix.environment
             .iter()
-            .any(|(key, value)| key == "AI_CLIENT_INSTALLER_ARTIFACT"
+            .any(|(key, value)| key == "EASY_AGENT_ARTIFACT"
                 && value == r"C:\Temp\client & calc.exe.msix")
     );
 }
@@ -379,6 +534,15 @@ fn minisign_verification_is_enforced_and_rejects_tampering() {
     let encoded_key = base64::engine::general_purpose::STANDARD.encode(public_key_document);
     let signature = "untrusted comment: signature from minisign secret key\nRUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=\ntrusted comment: timestamp:1556193335\tfile:test\ny/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==";
     verify_minisign_file(&artifact, &encoded_key, signature).unwrap();
+    assert!(
+        verify_configured_updater_signature_file(
+            &artifact,
+            Some(&encoded_key),
+            None,
+            Some(signature)
+        )
+        .unwrap()
+    );
     fs::write(&artifact, b"tampered").unwrap();
     assert!(verify_minisign_file(&artifact, &encoded_key, signature).is_err());
 }
@@ -523,16 +687,13 @@ package_kinds = ["msi"]
     assert!(
         results
             .iter()
-            .all(|result| result.state == ai_client_installer::core::OperationState::Failed)
+            .all(|result| result.state == easy_agent::core::OperationState::Failed)
     );
     let updates = updates.lock().unwrap();
     assert_eq!(updates.len(), 4);
     for (updates, result) in updates.chunks_exact(2).zip(&results) {
         assert_eq!(updates[0].product, result.product);
-        assert_eq!(
-            updates[0].state,
-            ai_client_installer::core::OperationState::Ready
-        );
+        assert_eq!(updates[0].state, easy_agent::core::OperationState::Ready);
         assert_eq!(updates[1].product, result.product);
         assert_eq!(updates[1].state, result.state);
     }

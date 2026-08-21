@@ -29,6 +29,10 @@ pub use security::{
     validate_staged_file_name, verify_staged_identity,
 };
 pub use trust::{
-    DistributionKind, TrustEntry, TrustRegistry, TrustRegistryError, UrlRule, WindowsPeMachine,
+    DistributionKind, MacOsInstallStrategy, RemoteDigestPolicy, TrustEntry, TrustRegistry,
+    TrustRegistryError, UrlRule, WindowsPeMachine,
 };
-pub use verification::{VerificationError, verify_minisign_file};
+pub use verification::{
+    VerificationError, verify_configured_updater_signature_file, verify_minisign_file,
+    verify_sparkle_ed25519_file,
+};

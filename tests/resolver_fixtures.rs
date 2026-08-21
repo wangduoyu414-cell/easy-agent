@@ -1,8 +1,11 @@
-use ai_client_installer::adapters::{
+use easy_agent::adapters::{
     candidate_from_claude_redirect, parse_cc_switch_manifest, parse_chatgpt_macos_appcast,
     parse_chatgpt_windows_manifest, parse_hermes_homepage, parse_workbuddy_update,
+    resolve_install_plan,
 };
-use ai_client_installer::core::{Architecture, OperatingSystem, PackageKind, ProductId};
+use easy_agent::core::{
+    Architecture, InstallPlan, OperatingSystem, PackageKind, PlatformInfo, ProductId, TrustRegistry,
+};
 
 #[test]
 fn parses_workbuddy_structured_update() {
@@ -130,6 +133,8 @@ fn parses_openai_macos_appcasts_without_crossing_architectures() {
     .unwrap();
     assert_eq!(arm64.version, "26.727.51351");
     assert_eq!(arm64.package_kind, PackageKind::Zip);
+    assert!(arm64.detached_signature.is_some());
+    assert!(x64.detached_signature.is_some());
     assert!(arm64.download_url.path().contains("darwin-arm64"));
     assert!(x64.download_url.path().contains("darwin-x64"));
     assert!(
@@ -144,7 +149,7 @@ fn parses_openai_macos_appcasts_without_crossing_architectures() {
 #[test]
 #[ignore = "live official network contract smoke test"]
 fn live_macos_metadata_contracts_parse_from_pinned_official_entries() {
-    use ai_client_installer::core::{TrustRegistry, fetch_official_text, safe_http_client};
+    use easy_agent::core::{fetch_official_text, safe_http_client};
     use url::Url;
 
     let registry = TrustRegistry::embedded().unwrap();
@@ -201,9 +206,40 @@ fn live_macos_metadata_contracts_parse_from_pinned_official_entries() {
 }
 
 #[test]
+#[ignore = "live official resolver smoke test; metadata only, no artifact download"]
+fn live_enabled_macos_install_plans_resolve_for_both_architectures() {
+    let registry = TrustRegistry::embedded().unwrap();
+    for architecture in [Architecture::X64, Architecture::Arm64] {
+        let platform = PlatformInfo {
+            os: OperatingSystem::MacOs,
+            architecture,
+            os_version: Some("14.0".into()),
+            description: "live resolver fixture".into(),
+        };
+        for product in [
+            ProductId::WorkBuddy,
+            ProductId::CcSwitch,
+            ProductId::ChatGpt,
+        ] {
+            let plan = resolve_install_plan(product, &platform, &registry).unwrap();
+            let InstallPlan::DirectPackage(candidate) = plan else {
+                panic!("macOS enabled product unexpectedly resolved to a non-direct plan");
+            };
+            assert_eq!(candidate.product, product);
+            assert_eq!(candidate.architecture, architecture);
+            assert!(!candidate.version.trim().is_empty());
+            assert!(matches!(
+                candidate.package_kind,
+                PackageKind::TarGz | PackageKind::Zip
+            ));
+        }
+    }
+}
+
+#[test]
 #[ignore = "run on a real Mac; Claude may challenge automated Windows requests"]
 fn live_claude_macos_redirect_resolves_to_a_universal_dmg() {
-    use ai_client_installer::core::{TrustRegistry, resolve_official_url, safe_http_client};
+    use easy_agent::core::{TrustRegistry, resolve_official_url, safe_http_client};
     use url::Url;
 
     let registry = TrustRegistry::embedded().unwrap();

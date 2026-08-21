@@ -11,8 +11,8 @@ use tempfile::Builder;
 use zip::ZipArchive;
 
 use crate::core::{
-    Architecture, Detection, PackageKind, ProductId, TrustEntry, verify_minisign_file,
-    verify_staged_identity,
+    Architecture, Detection, MacOsInstallStrategy, PackageKind, ProductId, TrustEntry,
+    verify_configured_updater_signature_file, verify_staged_identity,
 };
 
 use super::{ArtifactVerification, InstallerExecution, PlannedCommand, VerifiedInstallRequest};
@@ -57,6 +57,11 @@ pub fn detect_product(product: ProductId, trust: Option<&TrustEntry>) -> Result<
     let Some(application_name) = trust.macos_application_name.as_deref() else {
         return Ok(Detection::absent("macOS 应用名尚未固定"));
     };
+    if trust.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle) {
+        return Ok(Detection::absent(
+            "厂商 bootstrap 不能作为最终桌面应用安装状态",
+        ));
+    }
     if trust.macos_bundle_id.is_none() {
         return Ok(Detection::absent("macOS Bundle ID 尚未固定"));
     }
@@ -67,7 +72,7 @@ pub fn detect_product(product: ProductId, trust: Option<&TrustEntry>) -> Result<
         if !path.exists() {
             continue;
         }
-        let inspection = inspect_app_bundle(&path, trust, trust.architecture)?;
+        let inspection = inspect_app_bundle(&path, trust, None)?;
         found.push((path, label, inspection));
     }
     if found.is_empty() {
@@ -90,9 +95,51 @@ pub fn detect_product(product: ProductId, trust: Option<&TrustEntry>) -> Result<
         package_identity: Some(inspection.bundle_id),
         package_family: None,
         publisher: inspection.team_id,
-        architecture: Some(trust.architecture),
+        architecture: reported_architecture(&inspection.architectures, trust.architecture),
         evidence: format!("{label} · 已通过 Bundle/签名/Gatekeeper 检查"),
     })
+}
+
+pub fn preflight_direct_install(
+    trust: &TrustEntry,
+    _expected_architecture: Architecture,
+) -> Result<(), String> {
+    if trust.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle) {
+        return Err("the configured macOS install strategy is not implemented".into());
+    }
+    let application_name = trust
+        .macos_application_name
+        .as_deref()
+        .ok_or_else(|| "trust registry has no pinned macOS application name".to_owned())?;
+    let existing: Vec<_> = application_candidates(application_name)?
+        .into_iter()
+        .filter(|(path, _)| path.exists())
+        .collect();
+    if existing.len() > 1 {
+        return Err(format!(
+            "同时发现用户级和系统级 {application_name}，拒绝自动覆盖"
+        ));
+    }
+    if let Some((path, _)) = existing.first() {
+        let inspection = inspect_app_bundle(path, trust, None)?;
+        ensure_app_is_not_running(&inspection.executable_path, application_name)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| "installation target has no parent".to_owned())?;
+        ensure_install_parent_writable(parent)?;
+    } else {
+        let user_applications = user_applications_directory()?;
+        let writable_parent = if user_applications.exists() {
+            user_applications.as_path()
+        } else {
+            user_applications
+                .parent()
+                .ok_or_else(|| "user Applications has no parent".to_owned())?
+        };
+        validate_install_parent(writable_parent)?;
+        ensure_install_parent_writable(writable_parent)?;
+    }
+    Ok(())
 }
 
 pub fn verify_artifact(
@@ -106,11 +153,13 @@ pub fn verify_artifact(
     if !metadata.is_file() {
         return Err("artifact is not a regular file".into());
     }
-    if trust.updater_public_key.is_some() && !updater_signature_verified {
+    if (trust.updater_public_key.is_some() || trust.sparkle_ed25519_public_key.is_some())
+        && !updater_signature_verified
+    {
         return Err("the configured updater signature was not verified".into());
     }
     with_prepared_app(path, kind, trust, |app| {
-        let inspection = inspect_app_bundle(app, trust, expected_architecture)?;
+        let inspection = inspect_app_bundle(app, trust, Some(expected_architecture))?;
         Ok(ArtifactVerification {
             signer_subject: inspection.team_id,
             product_identity: inspection.bundle_id,
@@ -135,6 +184,9 @@ pub fn execute_verified_installer(
             request.trust.status_reason
         ));
     }
+    if request.trust.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle) {
+        return Err("the configured macOS install strategy is not implemented".into());
+    }
     verify_staged_identity(
         request.private_root,
         request.path,
@@ -142,19 +194,13 @@ pub fn execute_verified_installer(
         request.expected_sha256,
     )
     .map_err(|error| format!("verified artifact changed before installation: {error}"))?;
-    let updater_signature_verified = match (
+    let updater_signature_verified = verify_configured_updater_signature_file(
+        request.path,
         request.trust.updater_public_key.as_deref(),
+        request.trust.sparkle_ed25519_public_key.as_deref(),
         request.detached_signature,
-    ) {
-        (Some(public_key), Some(signature)) => {
-            verify_minisign_file(request.path, public_key, signature).map_err(|error| {
-                format!("updater signature changed before installation: {error}")
-            })?;
-            true
-        }
-        (None, None) => false,
-        _ => return Err("updater public key and detached signature are incomplete".into()),
-    };
+    )
+    .map_err(|error| format!("updater signature changed before installation: {error}"))?;
     verify_artifact(
         request.path,
         request.kind,
@@ -170,9 +216,13 @@ pub fn execute_verified_installer(
     )
     .map_err(|error| format!("artifact changed after platform verification: {error}"))?;
 
-    let target = select_install_target(request.trust, request.expected_architecture)?;
+    let target = select_install_target(request.trust)?;
     with_prepared_app(request.path, request.kind, request.trust, |source_app| {
-        inspect_app_bundle(source_app, request.trust, request.expected_architecture)?;
+        inspect_app_bundle(
+            source_app,
+            request.trust,
+            Some(request.expected_architecture),
+        )?;
         install_app_bundle(
             source_app,
             &target,
@@ -192,12 +242,14 @@ struct AppInspection {
     bundle_id: String,
     version: String,
     team_id: Option<String>,
+    executable_path: PathBuf,
+    architectures: HashSet<Architecture>,
 }
 
 fn inspect_app_bundle(
     app: &Path,
     trust: &TrustEntry,
-    expected_architecture: Architecture,
+    expected_architecture: Option<Architecture>,
 ) -> Result<AppInspection, String> {
     let metadata = fs::symlink_metadata(app)
         .map_err(|error| format!("cannot inspect app bundle {}: {error}", app.display()))?;
@@ -264,7 +316,9 @@ fn inspect_app_bundle(
         return Err("main executable escapes the app bundle".into());
     }
     let architectures = read_macho_architectures(&executable)?;
-    if !architectures.contains(&expected_architecture) {
+    if let Some(expected_architecture) = expected_architecture
+        && !architectures.contains(&expected_architecture)
+    {
         return Err(format!(
             "application architecture mismatch: expected {expected_architecture:?}, found {architectures:?}"
         ));
@@ -316,6 +370,8 @@ fn inspect_app_bundle(
         bundle_id: bundle_id.to_owned(),
         version,
         team_id,
+        executable_path: canonical_executable,
+        architectures,
     })
 }
 
@@ -684,10 +740,7 @@ fn find_expected_app(root: &Path, application_name: &str) -> Result<PathBuf, Str
     }
 }
 
-fn select_install_target(
-    trust: &TrustEntry,
-    expected_architecture: Architecture,
-) -> Result<PathBuf, String> {
+fn select_install_target(trust: &TrustEntry) -> Result<PathBuf, String> {
     let application_name = trust
         .macos_application_name
         .as_deref()
@@ -703,7 +756,8 @@ fn select_install_target(
         ));
     }
     if let Some((path, _)) = existing.first() {
-        inspect_app_bundle(path, trust, expected_architecture)?;
+        let inspection = inspect_app_bundle(path, trust, None)?;
+        ensure_app_is_not_running(&inspection.executable_path, application_name)?;
         return Ok((*path).clone());
     }
     let user_applications = user_applications_directory()?;
@@ -723,11 +777,12 @@ fn install_app_bundle(
         .parent()
         .ok_or_else(|| "installation target has no parent".to_owned())?;
     validate_install_parent(parent)?;
+    ensure_install_parent_writable(parent)?;
     if target.exists() {
-        inspect_app_bundle(target, trust, expected_architecture)?;
+        inspect_app_bundle(target, trust, None)?;
     }
     let stage_root = Builder::new()
-        .prefix(".ai-client-installer-stage-")
+        .prefix(".easy-agent-stage-")
         .tempdir_in(parent)
         .map_err(|error| format!("cannot create installation staging directory: {error}"))?;
     let stage_app = stage_root.path().join(
@@ -740,10 +795,10 @@ fn install_app_bundle(
         &[path_text(source)?, path_text(&stage_app)?],
     )?;
     ensure_command_success("app bundle copy", &copy)?;
-    inspect_app_bundle(&stage_app, trust, expected_architecture)?;
+    inspect_app_bundle(&stage_app, trust, Some(expected_architecture))?;
 
     activate_staged_app(&stage_app, target, |installed| {
-        inspect_app_bundle(installed, trust, expected_architecture).map(|_| ())
+        inspect_app_bundle(installed, trust, Some(expected_architecture)).map(|_| ())
     })
 }
 
@@ -756,7 +811,7 @@ fn activate_staged_app(
         .parent()
         .ok_or_else(|| "installation target has no parent".to_owned())?;
     let backup_root = Builder::new()
-        .prefix(".ai-client-installer-backup-")
+        .prefix(".easy-agent-backup-")
         .tempdir_in(parent)
         .map_err(|error| format!("cannot create installation backup directory: {error}"))?;
     let backup_app = backup_root.path().join(
@@ -842,6 +897,29 @@ fn validate_install_parent(parent: &Path) -> Result<(), String> {
             parent.display()
         ));
     }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_install_parent_writable(parent: &Path) -> Result<(), String> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(parent.as_os_str().as_bytes())
+        .map_err(|_| "installation parent contains an invalid NUL byte".to_owned())?;
+    // SAFETY: path is a live, NUL-terminated C string and access only queries permissions.
+    if unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "安装目录不可写：{}；请使用有权限的账户或先调整应用位置",
+            parent.display()
+        ))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_install_parent_writable(_parent: &Path) -> Result<(), String> {
     Ok(())
 }
 
@@ -943,6 +1021,39 @@ fn safe_single_file_name(value: &str) -> bool {
             .chars()
             .any(|character| matches!(character, '/' | '\\' | ':'))
         && !matches!(value, "." | "..")
+}
+
+fn ensure_app_is_not_running(executable: &Path, application_name: &str) -> Result<(), String> {
+    let output = command_output("/bin/ps", &["-axo", "comm="])?;
+    ensure_command_success("running application inspection", &output)?;
+    let process_list = String::from_utf8_lossy(&output.stdout);
+    if process_list_contains_executable(&process_list, executable) {
+        return Err(format!(
+            "{application_name} 仍在运行，请先完全退出该应用后再重试"
+        ));
+    }
+    Ok(())
+}
+
+fn process_list_contains_executable(process_list: &str, executable: &Path) -> bool {
+    process_list
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .any(|line| Path::new(line) == executable)
+}
+
+fn reported_architecture(
+    architectures: &HashSet<Architecture>,
+    preferred: Architecture,
+) -> Option<Architecture> {
+    if architectures.contains(&preferred) {
+        Some(preferred)
+    } else if architectures.len() == 1 {
+        architectures.iter().copied().next()
+    } else {
+        None
+    }
 }
 
 fn parse_codesign_value(source: &str, key: &str) -> Option<String> {
@@ -1082,6 +1193,8 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    use crate::core::{OperatingSystem, TrustRegistry};
+
     #[test]
     fn rejects_archive_paths_and_links_that_escape_staging() {
         assert!(validate_relative_path(Path::new("Client.app/Contents/Info.plist")).is_ok());
@@ -1100,6 +1213,34 @@ mod tests {
         assert_eq!(
             parse_codesign_value("TeamIdentifier=not set\n", "TeamIdentifier"),
             None
+        );
+    }
+
+    #[test]
+    fn running_app_detection_matches_the_exact_main_executable_path() {
+        let expected = Path::new("/Applications/CC Switch.app/Contents/MacOS/cc-switch");
+        let processes = "/Applications/Codex.app/Contents/MacOS/ChatGPT\n\
+                         /Applications/CC Switch.app/Contents/MacOS/cc-switch\n\
+                         /tmp/CC Switch.app/Contents/MacOS/cc-switch\n";
+        assert!(process_list_contains_executable(processes, expected));
+        assert!(!process_list_contains_executable(
+            "/Applications/Codex.app/Contents/MacOS/ChatGPT\n",
+            expected
+        ));
+    }
+
+    #[test]
+    fn existing_app_architecture_can_be_reported_before_a_cross_architecture_update() {
+        assert_eq!(
+            reported_architecture(&HashSet::from([Architecture::X64]), Architecture::Arm64),
+            Some(Architecture::X64)
+        );
+        assert_eq!(
+            reported_architecture(
+                &HashSet::from([Architecture::X64, Architecture::Arm64]),
+                Architecture::Arm64
+            ),
+            Some(Architecture::Arm64)
         );
     }
 
@@ -1129,6 +1270,62 @@ mod tests {
     }
 
     #[test]
+    fn fresh_install_activates_the_staged_app() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("Client.app");
+        let stage = root.path().join("Stage.app");
+        fs::create_dir(&stage).unwrap();
+        fs::write(stage.join("marker"), "new").unwrap();
+
+        activate_staged_app(&stage, &target, |installed| {
+            (fs::read_to_string(installed.join("marker")).unwrap() == "new")
+                .then_some(())
+                .ok_or_else(|| "unexpected marker".to_owned())
+        })
+        .unwrap();
+
+        assert_eq!(fs::read_to_string(target.join("marker")).unwrap(), "new");
+        assert!(!stage.exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn successful_update_replaces_the_existing_app() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("Client.app");
+        let stage = root.path().join("Stage.app");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("marker"), "old").unwrap();
+        fs::create_dir(&stage).unwrap();
+        fs::write(stage.join("marker"), "new").unwrap();
+
+        activate_staged_app(&stage, &target, |installed| {
+            (fs::read_to_string(installed.join("marker")).unwrap() == "new")
+                .then_some(())
+                .ok_or_else(|| "unexpected marker".to_owned())
+        })
+        .unwrap();
+
+        assert_eq!(fs::read_to_string(target.join("marker")).unwrap(), "new");
+        assert!(!stage.exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_fresh_install_verification_removes_the_invalid_app() {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("Client.app");
+        let stage = root.path().join("Stage.app");
+        fs::create_dir(&stage).unwrap();
+        fs::write(stage.join("marker"), "new").unwrap();
+
+        assert!(activate_staged_app(&stage, &target, |_| Err("fixture".into())).is_err());
+        assert!(!target.exists());
+        assert!(!stage.exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
+    #[test]
     fn failed_final_verification_restores_the_previous_app() {
         let root = tempfile::tempdir().unwrap();
         let target = root.path().join("Client.app");
@@ -1141,5 +1338,31 @@ mod tests {
         assert!(activate_staged_app(&stage, &target, |_| Err("fixture".into())).is_err());
         assert_eq!(fs::read_to_string(target.join("marker")).unwrap(), "old");
         assert!(!stage.exists());
+    }
+
+    #[test]
+    #[ignore = "current-host signed app copy/activation proof; does not modify Applications"]
+    fn current_cc_switch_exercises_fresh_and_update_activation_for_both_architectures() {
+        let registry = TrustRegistry::embedded().unwrap();
+        let source = Path::new("/Applications/CC Switch.app");
+        assert!(source.is_dir(), "CC Switch.app is required for this proof");
+
+        for architecture in [Architecture::X64, Architecture::Arm64] {
+            let trust = registry
+                .find(ProductId::CcSwitch, OperatingSystem::MacOs, architecture)
+                .unwrap();
+            let root = tempfile::tempdir().unwrap();
+            let target = root.path().join("CC Switch.app");
+
+            install_app_bundle(source, &target, trust, architecture).unwrap();
+            let fresh = inspect_app_bundle(&target, trust, Some(architecture)).unwrap();
+            assert_eq!(fresh.bundle_id, "com.ccswitch.desktop");
+            assert_eq!(fresh.team_id.as_deref(), Some("R8UR22V2F9"));
+
+            install_app_bundle(source, &target, trust, architecture).unwrap();
+            let updated = inspect_app_bundle(&target, trust, Some(architecture)).unwrap();
+            assert_eq!(updated.version, fresh.version);
+            assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        }
     }
 }

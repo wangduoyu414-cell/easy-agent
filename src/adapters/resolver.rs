@@ -2,9 +2,10 @@ use thiserror::Error;
 use url::Url;
 
 use crate::core::{
-    DistributionKind, HttpError, InstallPlan, MicrosoftStorePlan, OperatingSystem, PlatformInfo,
-    ProductId, ReleaseCandidate, SecurityError, TrustRegistry, TrustRegistryError,
-    ensure_allowed_url, fetch_official_text, resolve_official_url, safe_http_client,
+    DistributionKind, HttpError, InstallPlan, MacOsInstallStrategy, MicrosoftStorePlan,
+    OperatingSystem, PlatformInfo, ProductId, ReleaseCandidate, SecurityError, TrustRegistry,
+    TrustRegistryError, ensure_allowed_url, fetch_official_text, resolve_official_url,
+    safe_http_client,
 };
 
 use super::{
@@ -56,6 +57,13 @@ pub fn resolve_install_plan(
         .ok_or(ResolveError::MissingTrustEntry)?;
     if !trust.enabled {
         return Err(ResolveError::NoDirectResolver(trust.status_reason.clone()));
+    }
+    if platform.os == OperatingSystem::MacOs
+        && trust.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle)
+    {
+        return Err(ResolveError::NoDirectResolver(
+            "当前 macOS 安装策略不是已实现的直接应用包安装".into(),
+        ));
     }
     if platform.os == OperatingSystem::MacOs
         && let Some(minimum) = trust.minimum_macos_version.as_deref()

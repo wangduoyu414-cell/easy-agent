@@ -1,12 +1,7 @@
 /target/
 /dist/*
 !/dist/.gitkeep
-!/dist/AI-Client-Installer-windows-x64.exe
-!/dist/AI-Client-Installer-macos-universal.dmg
-!/dist/SHA256SUMS-windows-x64.txt
-!/dist/SHA256SUMS-macos-universal.txt
-!/dist/SHA256SUMS.txt
-!/dist/release-manifest.json
+!/dist/README.md
 /evidence/runtime/
 *.log
 *.part
