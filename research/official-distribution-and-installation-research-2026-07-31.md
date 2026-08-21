@@ -1,8 +1,8 @@
 # 五款 AI 客户端官方分发与安装调研
 
-> 2026-08-02 更新：本文的 ChatGPT Windows Store/目录推断已被新的官方客户端证据替代。当前实现使用 OpenAI 生产更新清单 `persistent.oaistatic.com/codex-app-prod/windows-store-update.json`，由本地代码构造对应架构完整 MSIX 并执行本地 AppX 部署；不依赖 Store、WinGet 或引导器。当前合同与 proof 见 `tasks/AI-CLIENT-INSTALLER-CHATGPT-DIRECT.md` 和 `evidence/chatgpt-direct-msix-proof-2026-08-02.md`。本文其余 2026-07-31 调研内容保留为历史依据。
+> 2026-08-11 更新：2026-08-02 的 ChatGPT Windows 直接 MSIX 结论已被新运行证据替代。当前 OpenAI 清单对应 x64/ARM64 对象均为 HTTP 404，旧包又声明 `appLicensing`；当前实现使用固定 Store ID 的后台 WinGet 安装来取得微软授权，不打开 Store UI，并禁止无授权本地包兜底。见 `evidence/chatgpt-windows-store-recovery-2026-08-11.md`。
 
-> 2026-08-03 macOS 更新：安装助手确定为一个 Universal DMG，内部同时包含 `x86_64` 与 `arm64`，运行时按物理硬件选择厂商包。WorkBuddy 采用各架构官方 ZIP+摘要；CC Switch 采用官方 minisign Universal tar.gz；Claude 采用官方 Universal DMG；ChatGPT 采用 OpenAI 官方 Intel/Apple Silicon appcast ZIP，并按 OpenAI 当前文档执行 macOS 14 下限；Hermes 官方明确不支持 Intel Mac。Mac 执行核心已实现，但所有可安装条目仍因 Developer Team ID/真机 Gatekeeper 与安装复检缺口保持 disabled。
+> 2026-08-04 macOS 更新：安装助手确定为一个 Universal DMG，内部同时包含 `x86_64` 与 `arm64`，运行时按物理硬件选择厂商包。WorkBuddy 采用各架构官方 ZIP+摘要；CC Switch 采用官方 minisign Universal tar.gz；Claude 采用官方 Universal DMG；ChatGPT 采用 OpenAI 官方 Intel/Apple Silicon appcast ZIP，并按 OpenAI 当前文档执行 macOS 14 下限；Hermes 官方明确不支持 Intel Mac。Mac 执行核心已实现，Intel 只读取证已固定已观察 Team ID，但所有可安装条目仍因 WorkBuddy 摘要不一致、Claude stable redirect challenge、Apple Silicon/干净机 Gate 与安装复检缺口保持 disabled。
 
 调研日期：2026-07-31
 适用目标：Windows 10/11 x64、Windows 10/11 ARM64、macOS 12+ Intel/Apple Silicon
@@ -120,7 +120,7 @@ Windows EXE 约 7.6 MB、macOS DMG 约 6.8 MB，明显是引导器而不是完�
 - 架构：官方平台表声明 Windows 10/11 支持 x86_64 与 aarch64；单一引导器如何选取架构必须在两种 Windows 干净环境中验证。macOS 安装器的 Intel/Apple Silicon 行为同样需要真机证据。
 - 检测：桌面应用与 runtime 分开报告。桌面安装成功不等于 runtime 已完成首次配置。
 - Windows 检测：优先 Uninstall 记录、发布者和主程序签名；安装目录可配置，不能只硬编码一个路径。runtime 默认根目录可检查 `%LOCALAPPDATA%\hermes`。
-- macOS 检测：使用 bundle ID `com.nousresearch.hermes`、应用版本和代码签名；runtime 默认检查 `~/.hermes`，但不把存在目录等同于健康可用。
+- macOS bootstrap 检测：官方 DMG 内应用名为 `Hermes.app`，bundle ID 为 `com.nousresearch.hermes.setup`，Team ID 为 `T2F6S8MF7C`；runtime 默认检查 `~/.hermes`，但不把存在目录等同于健康可用。最终桌面/runtime 状态仍需 Apple Silicon 真机安装证明。
 - 安装后结果：至少区分“桌面已安装”“runtime 待首次启动配置”“runtime 就绪”“安装失败”。
 - 长期风险：官网未发现带哈希/签名的结构化 latest manifest；解析器必须有 HTML fixture 测试，页面结构变化即停止，不应猜 URL。
 
@@ -176,7 +176,7 @@ Anthropic 当前桌面应用包含 Chat、Cowork、Code 三个页签。Code 页�
 
 - Windows 选择直接 MSIX，而不是 Setup 引导器，符合“完整可安装包”要求；按 x64/ARM64 选择，校验 MSIX 签名、包身份、版本和最终官方资产域。
 - Windows 检测使用官方文档给出的 `Get-AppxPackage -Name Claude` 语义，并核对 package family/publisher，不靠快捷方式。
-- macOS 使用 Universal DMG；检测标准位置中的 Claude.app，bundle/preference identity 为 `com.anthropic.Claude`，并核对版本、Team ID 与 Gatekeeper。
+- macOS 使用 Universal DMG；检测标准位置中的 `Claude.app`，bundle identity 为 `com.anthropic.claudefordesktop`、Team ID 为 `Q6L2SF6YDW`，并核对版本、双架构 slice 与 Gatekeeper。
 - 应用约每四小时检查自更新。V1 不关闭、不接管厂商自更新；安装助手再次运行时只比较当前安装版本与当时官方推荐版本。
 - 如果 Windows 已由企业 MDM/Provisioned Package 管理，不擅自更换安装所有者或禁用自更新，状态显示“受组织管理”。
 
@@ -260,10 +260,10 @@ OpenAI 当前说明：新的 ChatGPT 桌面应用合并 Chat、Work、Codex；Wi
 - WorkBuddy Windows signer：`Tencent Technology (Shenzhen) Company Limited`
 - Hermes Windows signer：`Nous Research Inc.`
 - CC Switch bundle ID：`com.ccswitch.desktop`，以及官方 Tauri updater public key
-- Claude macOS bundle identity：`com.anthropic.Claude`
+- Claude macOS bundle identity：`com.anthropic.claudefordesktop`，Team ID：`Q6L2SF6YDW`
 - ChatGPT Windows Product ID：`9PLM9XGG6VKS`，package family：`OpenAI.Codex_2p2nqsd0c76g0`
 
-Team ID、MSIX Publisher 或最终 Microsoft CDN host 等仍需实包 proof 的值，不用通配默认值代替；对应产品/平台在本地注册表中保持 disabled，直到证据被随安装助手新版固定。
+Team ID、MSIX Publisher 或最终 Microsoft CDN host 等值不用通配默认值代替；已取得实包 proof 的值随安装助手版本固定，尚未关闭摘要、入口可达性或 clean-machine 矩阵的产品/平台仍保持 disabled。
 
 ### 9.3 版本比较不能只用 SemVer
 
@@ -344,9 +344,9 @@ V1 不建设远程规则平台。长期维护用以下低成本手段完成：
 ## 12. 仍需在执行阶段关闭的证据缺口
 
 - ChatGPT Windows 完整 MSIX 与依赖在干净 x64/ARM64 系统上是否可绕过 Store UI 正常安装。
-- WorkBuddy macOS 应选官方 ZIP 还是 DMG，二者的 hash/signature 证据和安装体验哪个更完整。
-- Hermes 单一 bootstrap 在 Windows ARM64、macOS Intel/Apple Silicon 上实际生成的桌面架构与失败恢复行为。
-- 五款 macOS 应用的最终 Bundle ID、Team ID、DMG/ZIP notarization 状态。
+- WorkBuddy macOS 两架构官方 ZIP 的 API SHA-256 均与 CDN 返回的完整文件不一致；需厂商闭合摘要合同并完成两类 Mac 安装矩阵，不能通过忽略 SHA 处理。
+- Hermes 单一 bootstrap 在 Windows ARM64、macOS Apple Silicon 上实际生成的最终桌面/runtime 架构与失败恢复行为；macOS Intel 已按厂商策略关闭为 unsupported。
+- 五款 macOS 已观察应用身份已固定；仍需关闭 Claude stable redirect challenge，并完成 Intel/Apple Silicon 首次安装、更新、quarantine、Gatekeeper 与回滚矩阵。
 - WorkBuddy、Hermes Windows 安装器是否存在厂商支持的 unattended 参数；未证明前一律按交互安装。
 - 自家安装助手的 Windows Authenticode 证书、Apple Developer ID Application/Installer 证书与 notarization 凭据。
 

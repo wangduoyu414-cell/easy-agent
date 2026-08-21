@@ -5,13 +5,15 @@ mod macos;
 mod windows;
 #[cfg(windows)]
 mod windows_store;
+mod windows_store_contract;
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use crate::core::{
     Architecture, Detection, MicrosoftStorePlan, OperatingSystem, OperationUpdate, PackageKind,
-    PlatformInfo, ProductId, StableFileIdentity, TrustEntry,
+    PlatformInfo, ProductId, StableFileIdentity, TrustEntry, TrustRegistry,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +44,17 @@ pub struct VerifiedInstallRequest<'a> {
     pub expected_sha256: Option<&'a str>,
     pub kind: PackageKind,
     pub trust: &'a TrustEntry,
+    pub expected_architecture: Architecture,
+    pub detached_signature: Option<&'a str>,
+    pub bootstrap_payload: Option<&'a VerifiedInstallerPayload<'a>>,
+}
+
+pub struct VerifiedInstallerPayload<'a> {
+    pub private_root: &'a Path,
+    pub path: &'a Path,
+    pub verified_identity: &'a StableFileIdentity,
+    pub expected_sha256: Option<&'a str>,
+    pub kind: PackageKind,
     pub expected_architecture: Architecture,
     pub detached_signature: Option<&'a str>,
 }
@@ -97,37 +110,81 @@ pub fn current_platform() -> PlatformInfo {
 pub fn detect_product(product: ProductId, trust: Option<&TrustEntry>) -> Detection {
     #[cfg(windows)]
     {
-        windows::detect_product(product, trust).unwrap_or_else(|error| Detection {
-            installed: false,
-            version: None,
-            managed: false,
-            management_known: false,
-            package_identity: None,
-            package_family: None,
-            publisher: None,
-            architecture: None,
-            evidence: format!("检测失败：{error}"),
-        })
+        windows::detect_product(product, trust)
+            .unwrap_or_else(|error| Detection::failed(error.to_string()))
     }
     #[cfg(target_os = "macos")]
     {
-        macos::detect_product(product, trust).unwrap_or_else(|error| Detection {
-            installed: false,
-            version: None,
-            managed: false,
-            management_known: false,
-            package_identity: None,
-            package_family: None,
-            publisher: None,
-            architecture: None,
-            evidence: format!("检测失败：{error}"),
-        })
+        macos::detect_product(product, trust).unwrap_or_else(Detection::failed)
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = trust;
         Detection::absent(format!("{} 检测尚未在此平台实现", product.display_name()))
     }
+}
+
+pub fn detect_products(
+    platform: &PlatformInfo,
+    registry: Option<&TrustRegistry>,
+    products: &[ProductId],
+) -> HashMap<ProductId, Detection> {
+    #[cfg(windows)]
+    {
+        return windows::detect_products(registry, platform.architecture, products).unwrap_or_else(
+            |error| {
+                products
+                    .iter()
+                    .copied()
+                    .map(|product| (product, Detection::failed(error.to_string())))
+                    .collect()
+            },
+        );
+    }
+    #[cfg(not(windows))]
+    {
+        products
+            .iter()
+            .copied()
+            .map(|product| {
+                let trust = registry.and_then(|registry| {
+                    registry.find(product, platform.os, platform.architecture)
+                });
+                (product, detect_product(product, trust))
+            })
+            .collect()
+    }
+}
+
+#[cfg(windows)]
+pub fn downloads_directory() -> Result<PathBuf, String> {
+    windows::downloads_directory()
+}
+
+#[cfg(target_os = "macos")]
+pub fn downloads_directory() -> Result<PathBuf, String> {
+    macos::downloads_directory()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub fn downloads_directory() -> Result<PathBuf, String> {
+    Err("the system Downloads directory is unavailable on this platform".into())
+}
+
+#[cfg(target_os = "macos")]
+pub fn preflight_direct_install(
+    trust: &TrustEntry,
+    expected_architecture: Architecture,
+) -> Result<(), String> {
+    macos::preflight_direct_install(trust, expected_architecture)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn preflight_direct_install(
+    _trust: &TrustEntry,
+    _expected_architecture: Architecture,
+) -> Result<(), String> {
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -216,6 +273,26 @@ pub fn execute_microsoft_store_install(
     request: &StoreInstallRequest<'_>,
 ) -> Result<String, StoreInstallError> {
     windows_store::execute_microsoft_store_install(request)
+}
+
+#[doc(hidden)]
+pub fn extract_chatgpt_web_installer_tag_for_proof(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    windows_store_contract::extract_ms_store_tag(bytes)
+}
+
+#[doc(hidden)]
+pub fn validate_chatgpt_web_installer_tag_for_proof(
+    tag: &[u8],
+    store_id: &str,
+    package_family: &str,
+) -> Result<(), String> {
+    windows_store_contract::validate_web_installer_tag(
+        tag,
+        &windows_store_contract::WebInstallerExpectation {
+            store_id,
+            package_family,
+        },
+    )
 }
 
 #[cfg(not(windows))]

@@ -1,9 +1,14 @@
 use std::collections::HashSet;
 
+use base64::Engine;
+use minisign_verify::PublicKey;
 use serde::Deserialize;
 use thiserror::Error;
+use url::Url;
 
 use super::{Architecture, OperatingSystem, PackageKind, PlatformInfo, ProductId, SupportState};
+
+const CLAUDE_MSIX_PUBLISHER: &str = "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -11,6 +16,21 @@ pub enum DistributionKind {
     #[default]
     DirectPackage,
     MicrosoftStore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MacOsInstallStrategy {
+    DirectAppBundle,
+    VendorBootstrap,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteDigestPolicy {
+    #[default]
+    EnforceIfPresent,
+    PlatformSignatureOnly,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -76,25 +96,25 @@ pub struct TrustEntry {
     #[serde(default)]
     pub updater_public_key: Option<String>,
     #[serde(default)]
+    pub sparkle_ed25519_public_key: Option<String>,
+    #[serde(default)]
+    pub mirror_manifest_url: Option<String>,
+    #[serde(default)]
+    pub mirror_manifest_signature_url: Option<String>,
+    #[serde(default)]
+    pub mirror_artifact_base_url: Option<String>,
+    #[serde(default)]
+    pub mirror_url_rules: Vec<UrlRule>,
+    #[serde(default)]
+    pub mirror_manifest_public_key: Option<String>,
+    #[serde(default)]
+    pub mirror_max_stale_seconds: Option<u64>,
+    #[serde(default)]
+    pub remote_digest_policy: RemoteDigestPolicy,
+    #[serde(default)]
     pub store_id: Option<String>,
     #[serde(default)]
-    pub minimum_winget_version: Option<String>,
-    #[serde(default)]
-    pub app_installer_release_api: Option<String>,
-    #[serde(default)]
-    pub app_installer_bundle_asset: Option<String>,
-    #[serde(default)]
-    pub app_installer_dependencies_asset: Option<String>,
-    #[serde(default)]
-    pub app_installer_identity: Option<String>,
-    #[serde(default)]
-    pub app_installer_family: Option<String>,
-    #[serde(default)]
-    pub app_installer_publisher: Option<String>,
-    #[serde(default)]
-    pub dependency_identity_prefixes: Vec<String>,
-    #[serde(default)]
-    pub dependency_publishers: Vec<String>,
+    pub web_installer_signer_subject: Option<String>,
     #[serde(default)]
     pub macos_bundle_id: Option<String>,
     #[serde(default)]
@@ -103,6 +123,8 @@ pub struct TrustEntry {
     pub macos_application_name: Option<String>,
     #[serde(default)]
     pub minimum_macos_version: Option<String>,
+    #[serde(default)]
+    pub macos_install_strategy: Option<MacOsInstallStrategy>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -183,7 +205,8 @@ impl TrustRegistry {
             let has_macos_fields = entry.macos_bundle_id.is_some()
                 || entry.macos_team_id.is_some()
                 || entry.macos_application_name.is_some()
-                || entry.minimum_macos_version.is_some();
+                || entry.minimum_macos_version.is_some()
+                || entry.macos_install_strategy.is_some();
             if has_macos_fields && entry.os != OperatingSystem::MacOs {
                 return Err(TrustRegistryError::Invalid(
                     key.0.into(),
@@ -217,6 +240,17 @@ impl TrustRegistry {
                     key.1.into(),
                     key.2.into(),
                     "minimum_macos_version must be numeric dot-separated".into(),
+                ));
+            }
+            if entry.os == OperatingSystem::MacOs
+                && !entry.package_kinds.is_empty()
+                && entry.macos_install_strategy.is_none()
+            {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "macOS package entries must declare macos_install_strategy".into(),
                 ));
             }
 
@@ -269,6 +303,198 @@ impl TrustRegistry {
                 ));
             }
 
+            if entry.updater_public_key.is_some() && entry.sparkle_ed25519_public_key.is_some() {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "an entry cannot configure both minisign and Sparkle Ed25519 keys".into(),
+                ));
+            }
+            if let Some(encoded_key) = entry.sparkle_ed25519_public_key.as_deref() {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(encoded_key.trim())
+                    .ok();
+                if decoded.as_deref().is_none_or(|value| value.len() != 32)
+                    || entry.os != OperatingSystem::MacOs
+                    || entry.product != ProductId::ChatGpt
+                    || entry.package_kinds.as_slice() != [PackageKind::Zip]
+                {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "sparkle_ed25519_public_key is limited to a base64 32-byte ChatGPT macOS ZIP key"
+                            .into(),
+                    ));
+                }
+            }
+
+            let has_any_mirror_field = entry.mirror_manifest_url.is_some()
+                || entry.mirror_manifest_signature_url.is_some()
+                || entry.mirror_artifact_base_url.is_some()
+                || !entry.mirror_url_rules.is_empty()
+                || entry.mirror_manifest_public_key.is_some()
+                || entry.mirror_max_stale_seconds.is_some();
+            if has_any_mirror_field {
+                let mirror_complete = entry.mirror_manifest_url.is_some()
+                    && entry.mirror_manifest_signature_url.is_some()
+                    && entry.mirror_artifact_base_url.is_some()
+                    && !entry.mirror_url_rules.is_empty()
+                    && entry.mirror_manifest_public_key.is_some()
+                    && entry.mirror_max_stale_seconds.is_some();
+                if !mirror_complete {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "mirror fields must be configured as one complete set".into(),
+                    ));
+                }
+                let is_claude_windows = entry.product == ProductId::Claude
+                    && entry.os == OperatingSystem::Windows
+                    && matches!(entry.architecture, Architecture::X64 | Architecture::Arm64)
+                    && entry.distribution == DistributionKind::DirectPackage
+                    && entry.package_kinds.as_slice() == [PackageKind::Msix]
+                    && entry.signer_subjects.as_slice() == ["Anthropic, PBC"]
+                    && entry.package_identity.as_deref() == Some("Claude")
+                    && entry.package_family.as_deref() == Some("Claude_pzs8sxrjxfjjc")
+                    && entry.msix_publisher.as_deref() == Some(CLAUDE_MSIX_PUBLISHER);
+                let is_claude_macos = entry.product == ProductId::Claude
+                    && entry.os == OperatingSystem::MacOs
+                    && matches!(entry.architecture, Architecture::X64 | Architecture::Arm64)
+                    && entry.distribution == DistributionKind::DirectPackage
+                    && entry.package_kinds.as_slice() == [PackageKind::Dmg]
+                    && entry.macos_install_strategy == Some(MacOsInstallStrategy::DirectAppBundle)
+                    && entry.macos_application_name.as_deref() == Some("Claude.app")
+                    && entry.macos_bundle_id.as_deref() == Some("com.anthropic.claudefordesktop")
+                    && entry.macos_team_id.as_deref() == Some("Q6L2SF6YDW")
+                    && entry.minimum_macos_version.as_deref() == Some("12.0");
+                let is_chatgpt_macos = entry.product == ProductId::ChatGpt
+                    && entry.os == OperatingSystem::MacOs
+                    && matches!(entry.architecture, Architecture::X64 | Architecture::Arm64)
+                    && entry.distribution == DistributionKind::DirectPackage
+                    && entry.package_kinds.as_slice() == [PackageKind::Zip]
+                    && entry.macos_install_strategy == Some(MacOsInstallStrategy::DirectAppBundle)
+                    && entry.macos_bundle_id.as_deref() == Some("com.openai.codex")
+                    && entry.macos_team_id.as_deref() == Some("2DC432GLL2")
+                    && entry.sparkle_ed25519_public_key.is_some();
+                if !is_claude_windows && !is_claude_macos && !is_chatgpt_macos {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "verified mirror support is limited to pinned Claude Windows/macOS or ChatGPT macOS identities"
+                            .into(),
+                    ));
+                }
+                if entry.mirror_url_rules.iter().any(|mirror_rule| {
+                    entry.url_rules.iter().any(|official_rule| {
+                        mirror_rule.host.eq_ignore_ascii_case(&official_rule.host)
+                    })
+                }) {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "official and mirror URL rules must use separate hosts".into(),
+                    ));
+                }
+                let manifest_url = entry
+                    .mirror_manifest_url
+                    .as_deref()
+                    .and_then(|value| Url::parse(value).ok());
+                let signature_url = entry
+                    .mirror_manifest_signature_url
+                    .as_deref()
+                    .and_then(|value| Url::parse(value).ok());
+                if manifest_url
+                    .as_ref()
+                    .is_none_or(|url| !url_matches_rules(url, &entry.mirror_url_rules))
+                    || signature_url
+                        .as_ref()
+                        .is_none_or(|url| !url_matches_rules(url, &entry.mirror_url_rules))
+                {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "mirror manifest URLs must be HTTPS and match mirror_url_rules".into(),
+                    ));
+                }
+                let artifact_base = entry
+                    .mirror_artifact_base_url
+                    .as_deref()
+                    .and_then(|value| Url::parse(value).ok());
+                let valid_artifact_base = artifact_base.as_ref().is_some_and(|url| {
+                    url.scheme() == "https"
+                        && url.host_str().is_some()
+                        && url.path().ends_with('/')
+                        && url.query().is_none()
+                        && url.fragment().is_none()
+                        && entry.mirror_url_rules.iter().any(|rule| {
+                            url.host_str()
+                                .is_some_and(|host| host.eq_ignore_ascii_case(&rule.host))
+                        })
+                });
+                if !valid_artifact_base {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "mirror_artifact_base_url must be an HTTPS directory on a mirror host"
+                            .into(),
+                    ));
+                }
+                let valid_public_key = entry
+                    .mirror_manifest_public_key
+                    .as_deref()
+                    .and_then(|encoded| {
+                        base64::engine::general_purpose::STANDARD
+                            .decode(encoded.trim())
+                            .ok()
+                    })
+                    .and_then(|document| String::from_utf8(document).ok())
+                    .is_some_and(|document| PublicKey::decode(&document).is_ok());
+                if !valid_public_key {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "mirror_manifest_public_key is not a valid base64 minisign public key document"
+                            .into(),
+                    ));
+                }
+                if entry
+                    .mirror_max_stale_seconds
+                    .is_none_or(|seconds| !(3_600..=30 * 24 * 60 * 60).contains(&seconds))
+                {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "mirror_max_stale_seconds must be between one hour and 30 days".into(),
+                    ));
+                }
+            }
+            if entry.remote_digest_policy == RemoteDigestPolicy::PlatformSignatureOnly
+                && (entry.product != ProductId::WorkBuddy
+                    || entry.os != OperatingSystem::MacOs
+                    || entry.distribution != DistributionKind::DirectPackage
+                    || entry.package_kinds.as_slice() != [PackageKind::Zip]
+                    || entry.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle)
+                    || entry.macos_bundle_id.as_deref() != Some("com.workbuddy.workbuddy")
+                    || entry.macos_team_id.as_deref() != Some("FN2V63AD2J"))
+            {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "platform_signature_only digest policy is limited to the pinned WorkBuddy macOS ZIP identity"
+                        .into(),
+                ));
+            }
+
             if entry.allow_trusted_update_when_management_unknown
                 && (entry.product != ProductId::CcSwitch
                     || entry.package_kinds.as_slice() != [PackageKind::Msi]
@@ -307,6 +533,15 @@ impl TrustRegistry {
                     && entry.macos_application_name.is_none()
                 {
                     Some("macos_application_name")
+                } else if entry.os == OperatingSystem::MacOs
+                    && entry.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle)
+                {
+                    Some("implemented macos_install_strategy")
+                } else if entry.os == OperatingSystem::MacOs
+                    && entry.product == ProductId::ChatGpt
+                    && entry.sparkle_ed25519_public_key.is_none()
+                {
+                    Some("sparkle_ed25519_public_key")
                 } else if entry.package_kinds.contains(&PackageKind::Msix)
                     && entry.msix_publisher.is_none()
                 {
@@ -320,41 +555,9 @@ impl TrustRegistry {
                 {
                     Some("store_id")
                 } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.minimum_winget_version.is_none()
+                    && entry.web_installer_signer_subject.is_none()
                 {
-                    Some("minimum_winget_version")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.app_installer_release_api.is_none()
-                {
-                    Some("app_installer_release_api")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.app_installer_bundle_asset.is_none()
-                {
-                    Some("app_installer_bundle_asset")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.app_installer_dependencies_asset.is_none()
-                {
-                    Some("app_installer_dependencies_asset")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.app_installer_identity.is_none()
-                {
-                    Some("app_installer_identity")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.app_installer_family.is_none()
-                {
-                    Some("app_installer_family")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.app_installer_publisher.is_none()
-                {
-                    Some("app_installer_publisher")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.dependency_identity_prefixes.is_empty()
-                {
-                    Some("dependency_identity_prefixes")
-                } else if entry.distribution == DistributionKind::MicrosoftStore
-                    && entry.dependency_publishers.is_empty()
-                {
-                    Some("dependency_publishers")
+                    Some("web_installer_signer_subject")
                 } else {
                     None
                 };
@@ -429,6 +632,23 @@ fn is_numeric_version(version: &str) -> bool {
         && version
             .split('.')
             .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+fn url_matches_rules(url: &Url, rules: &[UrlRule]) -> bool {
+    if url.scheme() != "https" {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    rules.iter().any(|rule| {
+        host.eq_ignore_ascii_case(&rule.host)
+            && (rule.exact_paths.iter().any(|path| url.path() == path)
+                || rule
+                    .path_prefixes
+                    .iter()
+                    .any(|prefix| url.path().starts_with(prefix)))
+    })
 }
 
 fn numeric_version_is_older(current: &str, minimum: &str) -> bool {

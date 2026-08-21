@@ -1,0 +1,13 @@
+[Unit]
+Description=Check for new Claude Windows and macOS artifacts every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=2min
+AccuracySec=1min
+Persistent=true
+Unit=easy-agent-claude-sync.service
+
+[Install]
+WantedBy=timers.target

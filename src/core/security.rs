@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use url::Url;
 
-use super::TrustEntry;
+use super::{TrustEntry, UrlRule};
 
 #[derive(Debug, Error)]
 pub enum SecurityError {
@@ -56,12 +56,15 @@ pub struct StableFileIdentity {
 }
 
 pub fn ensure_allowed_url(url: &Url, trust: &TrustEntry) -> Result<(), SecurityError> {
+    ensure_allowed_url_against_rules(url, &trust.url_rules)
+}
+
+pub fn ensure_allowed_url_against_rules(url: &Url, rules: &[UrlRule]) -> Result<(), SecurityError> {
     if url.scheme() != "https" {
         return Err(SecurityError::NonHttps);
     }
     let host = url.host_str().ok_or(SecurityError::MissingHost)?;
-    let Some(rule) = trust
-        .url_rules
+    let Some(rule) = rules
         .iter()
         .find(|rule| host.eq_ignore_ascii_case(&rule.host))
     else {

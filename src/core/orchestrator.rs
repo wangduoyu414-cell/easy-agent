@@ -1,81 +1,231 @@
-use std::sync::Arc;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
 use crate::platform::{
     ArtifactVerification, StoreInstallError, StoreInstallRequest, VerifiedInstallRequest,
-    detect_product, execute_microsoft_store_install, execute_verified_installer, verify_artifact,
+    VerifiedInstallerPayload, detect_product, downloads_directory, execute_microsoft_store_install,
+    execute_verified_installer, preflight_direct_install, verify_artifact,
 };
 
 use super::{
-    Detection, DownloadControl, DownloadRequest, InstallPlan, OperationState, OperationUpdate,
-    PackageKind, PlatformInfo, ProductOperationResult, ReleaseCandidate, TrustRegistry,
-    download_to_private_staging_controlled, verify_minisign_file,
+    ArtifactSource, Detection, DownloadControl, DownloadError, DownloadRequest, DownloadResult,
+    InstallPlan, OperationState, OperationUpdate, PackageKind, PlatformInfo,
+    ProductOperationResult, ReleaseCandidate, RemoteDigestPolicy, TrustEntry, TrustRegistry,
+    download_error_allows_verified_fallback, download_to_private_staging_controlled,
+    save_verified_download_copy, verify_configured_updater_signature_file,
 };
 
 const DIRECT_POSTCHECK_ATTEMPTS: usize = 46;
 const DIRECT_POSTCHECK_INTERVAL: Duration = Duration::from_secs(2);
+const INSTALL_GATE_CANCEL_POLL: Duration = Duration::from_millis(50);
+
+#[derive(Debug, Default)]
+pub struct InstallExecutionGate {
+    state: Mutex<InstallExecutionGateState>,
+    changed: Condvar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallExecutionLane {
+    WindowsMsi,
+    WindowsAppx,
+}
+
+#[derive(Debug, Default)]
+struct InstallExecutionGateState {
+    windows_msi: InstallExecutionLaneState,
+    windows_appx: InstallExecutionLaneState,
+}
+
+#[derive(Debug, Default)]
+struct InstallExecutionLaneState {
+    active: bool,
+    next_ticket: u64,
+    queue: VecDeque<u64>,
+}
+
+struct InstallExecutionPermit<'a> {
+    gate: &'a InstallExecutionGate,
+    lane: InstallExecutionLane,
+}
+
+impl InstallExecutionGateState {
+    fn lane_mut(&mut self, lane: InstallExecutionLane) -> &mut InstallExecutionLaneState {
+        match lane {
+            InstallExecutionLane::WindowsMsi => &mut self.windows_msi,
+            InstallExecutionLane::WindowsAppx => &mut self.windows_appx,
+        }
+    }
+}
+
+impl InstallExecutionGate {
+    fn acquire(
+        &self,
+        lane: InstallExecutionLane,
+        cancel: &AtomicBool,
+        mut on_wait: impl FnMut(),
+    ) -> Result<InstallExecutionPermit<'_>, InstallOneError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| InstallOneError::Failed("安装队列状态异常".into()))?;
+        let ticket = {
+            let lane_state = state.lane_mut(lane);
+            let ticket = lane_state.next_ticket;
+            lane_state.next_ticket = lane_state.next_ticket.wrapping_add(1);
+            lane_state.queue.push_back(ticket);
+            ticket
+        };
+        let mut wait_announced = false;
+
+        loop {
+            if cancel.load(Ordering::Relaxed) {
+                state
+                    .lane_mut(lane)
+                    .queue
+                    .retain(|queued| *queued != ticket);
+                self.changed.notify_all();
+                return Err(InstallOneError::Cancelled(
+                    "已取消等待安装，未写入系统".into(),
+                ));
+            }
+            let can_acquire = {
+                let lane_state = state.lane_mut(lane);
+                !lane_state.active && lane_state.queue.front() == Some(&ticket)
+            };
+            if can_acquire {
+                let lane_state = state.lane_mut(lane);
+                lane_state.queue.pop_front();
+                lane_state.active = true;
+                return Ok(InstallExecutionPermit { gate: self, lane });
+            }
+            if !wait_announced {
+                wait_announced = true;
+                drop(state);
+                on_wait();
+                state = self
+                    .state
+                    .lock()
+                    .map_err(|_| InstallOneError::Failed("安装队列状态异常".into()))?;
+                continue;
+            }
+            let (next_state, _) = self
+                .changed
+                .wait_timeout(state, INSTALL_GATE_CANCEL_POLL)
+                .map_err(|_| InstallOneError::Failed("安装队列状态异常".into()))?;
+            state = next_state;
+        }
+    }
+}
+
+impl Drop for InstallExecutionPermit<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut state) = self.gate.state.lock() {
+            state.lane_mut(self.lane).active = false;
+            self.gate.changed.notify_all();
+        }
+    }
+}
+
+const fn exclusive_install_lane(kind: PackageKind) -> Option<InstallExecutionLane> {
+    match kind {
+        PackageKind::Msi => Some(InstallExecutionLane::WindowsMsi),
+        PackageKind::Msix => Some(InstallExecutionLane::WindowsAppx),
+        _ => None,
+    }
+}
 
 pub fn run_install_batch(
     plans: Vec<InstallPlan>,
     platform: PlatformInfo,
     registry: TrustRegistry,
     cancel: Arc<AtomicBool>,
+    resolve_download_fallback: impl Fn(&ReleaseCandidate) -> Result<Option<ReleaseCandidate>, String>,
     on_update: impl Fn(OperationUpdate),
 ) -> Vec<ProductOperationResult> {
+    let execution_gate = InstallExecutionGate::default();
     let mut results = Vec::with_capacity(plans.len());
     for plan in plans {
-        let product = plan.product();
-        if cancel.load(Ordering::Relaxed) {
-            let result = ProductOperationResult {
-                product,
-                state: OperationState::Cancelled,
-                message: "批次已取消，未启动后续产品".into(),
-            };
-            on_update(OperationUpdate {
-                product: result.product,
-                state: result.state,
-                message: result.message.clone(),
-            });
-            results.push(result);
-            continue;
-        }
-        on_update(OperationUpdate {
+        results.push(run_install_plan(
+            plan,
+            platform.clone(),
+            registry.clone(),
+            cancel.clone(),
+            &execution_gate,
+            &resolve_download_fallback,
+            &on_update,
+        ));
+    }
+    results
+}
+
+pub fn run_install_plan(
+    plan: InstallPlan,
+    platform: PlatformInfo,
+    registry: TrustRegistry,
+    cancel: Arc<AtomicBool>,
+    execution_gate: &InstallExecutionGate,
+    resolve_download_fallback: impl Fn(&ReleaseCandidate) -> Result<Option<ReleaseCandidate>, String>,
+    on_update: impl Fn(OperationUpdate),
+) -> ProductOperationResult {
+    let product = plan.product();
+    if cancel.load(Ordering::Relaxed) {
+        let result = ProductOperationResult {
             product,
-            state: OperationState::Ready,
-            message: "用户已确认，开始执行官方安装计划".into(),
-        });
-        let result = match install_one(&plan, &platform, &registry, &cancel, &on_update) {
-            Ok(message) => ProductOperationResult {
-                product,
-                state: OperationState::Succeeded,
-                message,
-            },
-            Err(InstallOneError::Cancelled(message)) => ProductOperationResult {
-                product,
-                state: OperationState::Cancelled,
-                message,
-            },
-            Err(InstallOneError::Failed(message)) => ProductOperationResult {
-                product,
-                state: OperationState::Failed,
-                message,
-            },
-            Err(InstallOneError::ResultUnknown(message)) => ProductOperationResult {
-                product,
-                state: OperationState::ResultUnknown,
-                message,
-            },
+            state: OperationState::Cancelled,
+            message: "任务已取消，未开始下载或安装".into(),
         };
         on_update(OperationUpdate {
-            product: result.product,
+            product,
             state: result.state,
             message: result.message.clone(),
         });
-        results.push(result);
+        return result;
     }
-    results
+    on_update(OperationUpdate {
+        product,
+        state: OperationState::Ready,
+        message: "用户已确认，开始执行可信安装计划".into(),
+    });
+    let result = match install_one(
+        &plan,
+        &platform,
+        &registry,
+        &cancel,
+        execution_gate,
+        &resolve_download_fallback,
+        &on_update,
+    ) {
+        Ok(message) => ProductOperationResult {
+            product,
+            state: OperationState::Succeeded,
+            message,
+        },
+        Err(InstallOneError::Cancelled(message)) => ProductOperationResult {
+            product,
+            state: OperationState::Cancelled,
+            message,
+        },
+        Err(InstallOneError::Failed(message)) => ProductOperationResult {
+            product,
+            state: OperationState::Failed,
+            message,
+        },
+        Err(InstallOneError::ResultUnknown(message)) => ProductOperationResult {
+            product,
+            state: OperationState::ResultUnknown,
+            message,
+        },
+    };
+    on_update(OperationUpdate {
+        product,
+        state: result.state,
+        message: result.message.clone(),
+    });
+    result
 }
 
 #[derive(Debug)]
@@ -97,6 +247,8 @@ fn install_one(
     platform: &PlatformInfo,
     registry: &TrustRegistry,
     cancel: &Arc<AtomicBool>,
+    execution_gate: &InstallExecutionGate,
+    resolve_download_fallback: &impl Fn(&ReleaseCandidate) -> Result<Option<ReleaseCandidate>, String>,
     on_update: &impl Fn(OperationUpdate),
 ) -> Result<String, InstallOneError> {
     let product = plan.product();
@@ -114,10 +266,29 @@ fn install_one(
     }
     let current = detect_product(product, Some(trust));
     match plan {
-        InstallPlan::DirectPackage(candidate) => {
-            install_direct_package(candidate, platform, registry, cancel, on_update, &current)
-        }
+        InstallPlan::DirectPackage(candidate) => install_direct_package(
+            candidate,
+            trust,
+            cancel,
+            execution_gate,
+            resolve_download_fallback,
+            on_update,
+            &current,
+        ),
         InstallPlan::MicrosoftStore(store_plan) => {
+            let _permit =
+                execution_gate.acquire(InstallExecutionLane::WindowsAppx, cancel, || {
+                    on_update(OperationUpdate {
+                        product,
+                        state: OperationState::Queued,
+                        message: "另一个 Windows 应用包正在写入系统，当前任务稍后自动继续".into(),
+                    });
+                })?;
+            if cancel.load(Ordering::Relaxed) {
+                return Err(InstallOneError::Cancelled(
+                    "已在进入 ChatGPT 安装流程前取消".into(),
+                ));
+            }
             execute_microsoft_store_install(&StoreInstallRequest {
                 plan: store_plan,
                 trust,
@@ -138,15 +309,13 @@ fn install_one(
 
 fn install_direct_package(
     candidate: &ReleaseCandidate,
-    platform: &PlatformInfo,
-    registry: &TrustRegistry,
+    trust: &super::TrustEntry,
     cancel: &Arc<AtomicBool>,
+    execution_gate: &InstallExecutionGate,
+    resolve_download_fallback: &impl Fn(&ReleaseCandidate) -> Result<Option<ReleaseCandidate>, String>,
     on_update: &impl Fn(OperationUpdate),
     current: &Detection,
 ) -> Result<String, InstallOneError> {
-    let trust = registry
-        .find(candidate.product, platform.os, platform.architecture)
-        .ok_or_else(|| InstallOneError::Failed("缺少当前平台的信任条目".into()))?;
     match assess_existing_install_for_product(
         current,
         candidate.product,
@@ -157,103 +326,132 @@ fn install_direct_package(
         PreinstallDecision::AlreadyCurrent(message) => return Ok(message),
         PreinstallDecision::Reject(message) => return Err(InstallOneError::Failed(message)),
     }
+    preflight_direct_install(trust, candidate.architecture)
+        .map_err(|error| InstallOneError::Failed(format!("安装前检查失败：{error}")))?;
 
-    let safe_version: String = candidate
-        .version
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let file_name = format!(
-        "{}-{}.{}",
-        candidate.product.key(),
-        safe_version,
-        candidate.package_kind.extension()
-    );
-    emit(
+    let mut active_candidate = candidate.clone();
+    let download = match download_candidate(
+        &active_candidate,
+        trust,
+        cancel,
         on_update,
-        candidate,
-        OperationState::Downloading,
-        "从已固定的官方来源下载",
-    );
-    let progress = |received: u64, total: Option<u64>| {
-        let message = match total {
-            Some(total) if total > 0 => format!(
-                "已下载 {:.1}% ({:.1}/{:.1} MiB)",
-                received as f64 * 100.0 / total as f64,
-                received as f64 / 1_048_576.0,
-                total as f64 / 1_048_576.0
-            ),
-            _ => format!("已下载 {:.1} MiB", received as f64 / 1_048_576.0),
-        };
-        emit(on_update, candidate, OperationState::Downloading, &message);
-    };
-    let is_cancelled = || cancel.load(Ordering::Relaxed);
-    let download = download_to_private_staging_controlled(
-        &DownloadRequest {
-            url: candidate.download_url.clone(),
-            file_name,
-            trust,
-        },
-        &DownloadControl {
-            is_cancelled: &is_cancelled,
-            on_progress: &progress,
-        },
-    )
-    .map_err(|error| {
-        if matches!(error, super::DownloadError::Cancelled) {
-            InstallOneError::Cancelled("下载已取消，未启动安装器".into())
-        } else {
-            InstallOneError::Failed(format!("下载失败：{error}"))
-        }
-    })?;
-
-    emit(
-        on_update,
-        candidate,
-        OperationState::Verifying,
-        "正在核对摘要、平台签名、产品身份和架构",
-    );
-    if let Some(expected) = candidate.expected_sha256.as_deref()
-        && !download.identity.sha256.eq_ignore_ascii_case(expected)
-    {
-        return Err(InstallOneError::Failed("官方摘要不匹配".into()));
-    }
-    let updater_signature_verified = match (
-        trust.updater_public_key.as_deref(),
-        candidate.detached_signature.as_deref(),
+        "正在下载安装程序",
     ) {
-        (Some(public_key), Some(signature)) => {
-            verify_minisign_file(&download.staged_path, public_key, signature)
-                .map_err(|error| InstallOneError::Failed(format!("更新器签名验证失败：{error}")))?;
-            true
-        }
-        (None, None) => false,
-        _ => {
-            return Err(InstallOneError::Failed(
-                "信任注册表公钥与候选包签名不完整".into(),
+        Ok(download) => download,
+        Err(DownloadError::Cancelled) => {
+            return Err(InstallOneError::Cancelled(
+                "下载已取消，未启动安装器".into(),
             ));
         }
+        Err(official_error)
+            if matches!(active_candidate.source, ArtifactSource::Official)
+                && download_error_allows_verified_fallback(&official_error) =>
+        {
+            let fallback =
+                resolve_download_fallback(&active_candidate).map_err(|fallback_error| {
+                    InstallOneError::Failed(format!(
+                        "下载失败：{official_error}；自动恢复失败：{fallback_error}"
+                    ))
+                })?;
+            let Some(fallback) = fallback else {
+                return Err(InstallOneError::Failed(format!(
+                    "下载失败：{official_error}"
+                )));
+            };
+            validate_verified_download_fallback(&active_candidate, &fallback)
+                .map_err(InstallOneError::Failed)?;
+            emit(
+                on_update,
+                &active_candidate,
+                OperationState::Downloading,
+                "当前网络中断，正在自动恢复下载",
+            );
+            active_candidate = fallback;
+            match download_candidate(
+                &active_candidate,
+                trust,
+                cancel,
+                on_update,
+                "正在从受验证备用节点下载安装程序",
+            ) {
+                Ok(download) => download,
+                Err(DownloadError::Cancelled) => {
+                    return Err(InstallOneError::Cancelled(
+                        "下载已取消，未启动安装器".into(),
+                    ));
+                }
+                Err(fallback_error) => {
+                    return Err(InstallOneError::Failed(format!(
+                        "下载失败：直连 {official_error}；自动恢复 {fallback_error}"
+                    )));
+                }
+            }
+        }
+        Err(error) => return Err(InstallOneError::Failed(format!("下载失败：{error}"))),
     };
-    let verification = verify_artifact(
-        &download.staged_path,
-        candidate.package_kind,
-        trust,
-        candidate.architecture,
-        updater_signature_verified,
-    )
-    .map_err(|error| InstallOneError::Failed(format!("平台验证失败：{error}")))?;
-    verify_candidate_artifact_version(candidate, &verification).map_err(InstallOneError::Failed)?;
+    let candidate = &active_candidate;
+
+    verify_downloaded_candidate(candidate, &download, trust, on_update)?;
+
+    let payload_download = if let Some(payload) = candidate.bootstrap_payload.as_deref() {
+        if payload.bootstrap_payload.is_some()
+            || payload.product != candidate.product
+            || payload.version != candidate.version
+            || payload.architecture != candidate.architecture
+        {
+            return Err(InstallOneError::Failed(
+                "完整离线安装包与安装程序合同不一致".into(),
+            ));
+        }
+        let payload_download = match download_candidate(
+            payload,
+            trust,
+            cancel,
+            on_update,
+            "正在下载完整离线安装包；完成后官方安装程序不再访问下载服务器",
+        ) {
+            Ok(download) => download,
+            Err(DownloadError::Cancelled) => {
+                return Err(InstallOneError::Cancelled(
+                    "完整离线安装包下载已取消，未启动安装程序".into(),
+                ));
+            }
+            Err(error) => {
+                return Err(InstallOneError::Failed(format!(
+                    "完整离线安装包下载失败：{error}"
+                )));
+            }
+        };
+        verify_downloaded_candidate(payload, &payload_download, trust, on_update)?;
+        Some(payload_download)
+    } else {
+        None
+    };
+    if cancel.load(Ordering::Relaxed) {
+        return Err(InstallOneError::Cancelled("已在启动安装器前取消".into()));
+    }
+
+    let _permit = if let Some(lane) = exclusive_install_lane(candidate.package_kind) {
+        Some(execution_gate.acquire(lane, cancel, || {
+            emit(
+                on_update,
+                candidate,
+                OperationState::Queued,
+                "同类 Windows 系统安装任务正在进行，当前任务稍后自动继续",
+            );
+        })?)
+    } else {
+        None
+    };
     if cancel.load(Ordering::Relaxed) {
         return Err(InstallOneError::Cancelled("已在启动安装器前取消".into()));
     }
 
     let (handoff_message, installing_message) = match candidate.package_kind {
+        PackageKind::Exe if candidate.bootstrap_payload.is_some() => (
+            "即将启动厂商安装程序；完整安装包已经在本机验证，安装阶段无需再次下载",
+            "厂商安装程序正在使用本地完整包安装；等待其退出",
+        ),
         PackageKind::Msix => (
             "即将部署已验证的完整 MSIX；运行中的目标客户端可能被系统关闭",
             "Windows 正在部署应用包；等待系统返回结果",
@@ -283,15 +481,32 @@ fn install_direct_package(
         OperationState::Installing,
         installing_message,
     );
+    let verified_payload = candidate
+        .bootstrap_payload
+        .as_deref()
+        .zip(payload_download.as_ref())
+        .map(|(payload, download)| VerifiedInstallerPayload {
+            private_root: download.private_root.path(),
+            path: &download.staged_path,
+            verified_identity: &download.identity,
+            expected_sha256: payload.expected_sha256.as_deref(),
+            kind: payload.package_kind,
+            expected_architecture: payload.architecture,
+            detached_signature: payload.detached_signature.as_deref(),
+        });
     let execution = execute_verified_installer(&VerifiedInstallRequest {
         private_root: download.private_root.path(),
         path: &download.staged_path,
         verified_identity: &download.identity,
-        expected_sha256: candidate.expected_sha256.as_deref(),
+        expected_sha256: match trust.remote_digest_policy {
+            RemoteDigestPolicy::EnforceIfPresent => candidate.expected_sha256.as_deref(),
+            RemoteDigestPolicy::PlatformSignatureOnly => None,
+        },
         kind: candidate.package_kind,
         trust,
         expected_architecture: candidate.architecture,
         detached_signature: candidate.detached_signature.as_deref(),
+        bootstrap_payload: verified_payload.as_ref(),
     })
     .map_err(|error| InstallOneError::Failed(format!("无法启动安装：{error}")))?;
     let installer_succeeded = execution.exit_code == 0
@@ -332,6 +547,195 @@ fn install_direct_package(
         || detect_product(candidate.product, Some(trust)),
         thread::sleep,
     )
+}
+
+fn verify_downloaded_candidate(
+    candidate: &ReleaseCandidate,
+    download: &DownloadResult,
+    trust: &TrustEntry,
+    on_update: &impl Fn(OperationUpdate),
+) -> Result<(), InstallOneError> {
+    emit(
+        on_update,
+        candidate,
+        OperationState::Verifying,
+        "正在核对摘要、平台签名、产品身份、版本和架构",
+    );
+    if let Some(warning) = evaluate_remote_digest(
+        trust.remote_digest_policy,
+        candidate.expected_sha256.as_deref(),
+        &download.identity.sha256,
+    )
+    .map_err(InstallOneError::Failed)?
+    {
+        emit(on_update, candidate, OperationState::Verifying, warning);
+    }
+    let updater_signature_verified = verify_configured_updater_signature_file(
+        &download.staged_path,
+        trust.updater_public_key.as_deref(),
+        trust.sparkle_ed25519_public_key.as_deref(),
+        candidate.detached_signature.as_deref(),
+    )
+    .map_err(|error| InstallOneError::Failed(format!("更新器签名验证失败：{error}")))?;
+    let verification = verify_artifact(
+        &download.staged_path,
+        candidate.package_kind,
+        trust,
+        candidate.architecture,
+        updater_signature_verified,
+    )
+    .map_err(|error| InstallOneError::Failed(format!("平台验证失败：{error}")))?;
+    verify_candidate_artifact_version(candidate, &verification).map_err(InstallOneError::Failed)?;
+
+    let downloads = downloads_directory()
+        .map_err(|error| InstallOneError::Failed(format!("无法定位系统“下载”目录：{error}")))?;
+    let visible_copy = save_verified_download_copy(download, &downloads).map_err(|error| {
+        InstallOneError::Failed(format!("无法保存安装包到系统“下载”目录：{error}"))
+    })?;
+    let visible_name = visible_copy
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("已验证安装包");
+    emit(
+        on_update,
+        candidate,
+        OperationState::Verifying,
+        &format!("已验证并保存到系统“下载”目录：{visible_name}"),
+    );
+    Ok(())
+}
+
+fn download_candidate(
+    candidate: &ReleaseCandidate,
+    trust: &TrustEntry,
+    cancel: &Arc<AtomicBool>,
+    on_update: &impl Fn(OperationUpdate),
+    initial_message: &str,
+) -> Result<DownloadResult, DownloadError> {
+    let safe_version: String = candidate
+        .version
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let file_name = format!(
+        "{}-{}.{}",
+        candidate.product.key(),
+        safe_version,
+        candidate.package_kind.extension()
+    );
+    emit(
+        on_update,
+        candidate,
+        OperationState::Downloading,
+        initial_message,
+    );
+    let progress = |received: u64, total: Option<u64>| {
+        let message = match total {
+            Some(total) if total > 0 => format!(
+                "已下载 {:.1}% ({:.1}/{:.1} MiB)",
+                received as f64 * 100.0 / total as f64,
+                received as f64 / 1_048_576.0,
+                total as f64 / 1_048_576.0
+            ),
+            _ => format!("已下载 {:.1} MiB", received as f64 / 1_048_576.0),
+        };
+        emit(on_update, candidate, OperationState::Downloading, &message);
+    };
+    let is_cancelled = || cancel.load(Ordering::Relaxed);
+    let download_url_rules = match candidate.source {
+        ArtifactSource::Official => &trust.url_rules,
+        ArtifactSource::VerifiedMirror { .. } => &trust.mirror_url_rules,
+    };
+    download_to_private_staging_controlled(
+        &DownloadRequest {
+            url: candidate.download_url.clone(),
+            file_name,
+            url_rules: download_url_rules,
+            expected_size: candidate.expected_size,
+        },
+        &DownloadControl {
+            is_cancelled: &is_cancelled,
+            on_progress: &progress,
+        },
+    )
+}
+
+fn validate_verified_download_fallback(
+    primary: &ReleaseCandidate,
+    fallback: &ReleaseCandidate,
+) -> Result<(), String> {
+    if !fallback.source.is_verified_mirror()
+        || fallback.product != primary.product
+        || fallback.version != primary.version
+        || fallback.architecture != primary.architecture
+        || fallback.package_kind != primary.package_kind
+        || fallback.expected_size.is_none()
+        || primary
+            .expected_size
+            .is_some_and(|expected| fallback.expected_size != Some(expected))
+        || primary
+            .expected_sha256
+            .as_deref()
+            .is_some_and(|expected| fallback.expected_sha256.as_deref() != Some(expected))
+        || primary
+            .detached_signature
+            .as_deref()
+            .is_some_and(|expected| fallback.detached_signature.as_deref() != Some(expected))
+        || fallback.expected_sha256.is_none()
+        || !bootstrap_payloads_match(primary, fallback)
+    {
+        return Err("自动恢复包与已确认的目标版本不完全一致，已停止安装".into());
+    }
+    Ok(())
+}
+
+fn bootstrap_payloads_match(primary: &ReleaseCandidate, fallback: &ReleaseCandidate) -> bool {
+    match (
+        primary.bootstrap_payload.as_deref(),
+        fallback.bootstrap_payload.as_deref(),
+    ) {
+        (None, None) => true,
+        (Some(primary), Some(fallback)) => {
+            primary.bootstrap_payload.is_none()
+                && fallback.bootstrap_payload.is_none()
+                && primary.source.is_verified_mirror()
+                && fallback.source.is_verified_mirror()
+                && primary.product == fallback.product
+                && primary.version == fallback.version
+                && primary.architecture == fallback.architecture
+                && primary.package_kind == fallback.package_kind
+                && primary.download_url == fallback.download_url
+                && primary.expected_size == fallback.expected_size
+                && primary.expected_sha256 == fallback.expected_sha256
+                && primary.detached_signature == fallback.detached_signature
+        }
+        _ => false,
+    }
+}
+
+fn evaluate_remote_digest(
+    policy: RemoteDigestPolicy,
+    expected: Option<&str>,
+    actual: &str,
+) -> Result<Option<&'static str>, String> {
+    let Some(expected) = expected else {
+        return Ok(None);
+    };
+    if actual.eq_ignore_ascii_case(expected) {
+        return Ok(None);
+    }
+    match policy {
+        RemoteDigestPolicy::EnforceIfPresent => Err("预期 SHA-256 摘要不匹配".into()),
+        RemoteDigestPolicy::PlatformSignatureOnly => Ok(Some(
+            "厂商提供的 SHA-256 与下载文件不一致；按 WorkBuddy macOS 专用策略继续验证 Apple 签名和应用身份",
+        )),
+    }
 }
 
 enum DirectPostcheckDecision {
@@ -437,11 +841,11 @@ fn verify_candidate_artifact_version(
     candidate: &ReleaseCandidate,
     verification: &ArtifactVerification,
 ) -> Result<(), String> {
-    let requires_exact_bundle_version = matches!(
+    let requires_exact_artifact_version = matches!(
         candidate.package_kind,
-        PackageKind::Dmg | PackageKind::TarGz | PackageKind::Zip
+        PackageKind::Msix | PackageKind::Dmg | PackageKind::TarGz | PackageKind::Zip
     );
-    if candidate.product != super::ProductId::ChatGpt && !requires_exact_bundle_version {
+    if !requires_exact_artifact_version {
         return Ok(());
     }
     match verification.version.as_deref() {
@@ -538,6 +942,9 @@ fn assess_existing_install_with_precision(
     precision: Option<usize>,
     allow_unknown_management: bool,
 ) -> PreinstallDecision {
+    if detection.is_failed() {
+        return PreinstallDecision::Reject("无法确认当前安装状态，请先刷新状态后再试".into());
+    }
     if !detection.installed {
         return PreinstallDecision::Proceed;
     }
@@ -599,16 +1006,22 @@ const fn version_precision(product: super::ProductId) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
     use std::time::Duration;
 
     use url::Url;
 
     use super::{
-        InstallOneError, verify_candidate_artifact_version, wait_for_direct_postcheck_with,
+        InstallExecutionGate, InstallExecutionLane, InstallOneError, PreinstallDecision,
+        assess_existing_install, evaluate_remote_digest, exclusive_install_lane,
+        validate_verified_download_fallback, verify_candidate_artifact_version,
+        wait_for_direct_postcheck_with,
     };
     use crate::core::{
-        Architecture, Detection, OperatingSystem, PackageKind, ProductId, ReleaseCandidate,
-        TrustRegistry,
+        Architecture, ArtifactSource, Detection, OperatingSystem, PackageKind, ProductId,
+        ReleaseCandidate, RemoteDigestPolicy, TrustRegistry,
     };
     use crate::platform::ArtifactVerification;
 
@@ -620,9 +1033,70 @@ mod tests {
             package_kind: PackageKind::Exe,
             download_url: Url::parse("https://download.codebuddy.cn/workbuddy/WorkBuddySetup.exe")
                 .unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: None,
+            expected_size: None,
             expected_sha256: None,
             detached_signature: None,
+            bootstrap_payload: None,
         }
+    }
+
+    #[test]
+    fn install_gate_serializes_only_the_same_system_engine_and_allows_cancellation() {
+        let gate = Arc::new(InstallExecutionGate::default());
+        let first_cancel = AtomicBool::new(false);
+        let first_permit = gate
+            .acquire(InstallExecutionLane::WindowsMsi, &first_cancel, || {})
+            .unwrap();
+
+        let appx_cancel = AtomicBool::new(false);
+        let appx_permit = gate
+            .acquire(InstallExecutionLane::WindowsAppx, &appx_cancel, || {})
+            .unwrap();
+        drop(appx_permit);
+
+        let second_gate = gate.clone();
+        let second_cancel = Arc::new(AtomicBool::new(false));
+        let cancel_for_thread = second_cancel.clone();
+        let wait_announced = Arc::new(AtomicBool::new(false));
+        let wait_for_thread = wait_announced.clone();
+        let second = thread::spawn(move || {
+            second_gate
+                .acquire(InstallExecutionLane::WindowsMsi, &cancel_for_thread, || {
+                    wait_for_thread.store(true, Ordering::Relaxed)
+                })
+                .is_err()
+        });
+
+        thread::sleep(Duration::from_millis(80));
+        assert!(wait_announced.load(Ordering::Relaxed));
+        second_cancel.store(true, Ordering::Relaxed);
+        assert!(second.join().unwrap());
+
+        let third_gate = gate.clone();
+        let third = thread::spawn(move || {
+            let cancel = AtomicBool::new(false);
+            let _permit = third_gate
+                .acquire(InstallExecutionLane::WindowsMsi, &cancel, || {})
+                .unwrap();
+            true
+        });
+        thread::sleep(Duration::from_millis(80));
+        assert!(!third.is_finished());
+        drop(first_permit);
+        assert!(third.join().unwrap());
+
+        assert_eq!(exclusive_install_lane(PackageKind::Exe), None);
+        assert_eq!(exclusive_install_lane(PackageKind::Dmg), None);
+        assert_eq!(
+            exclusive_install_lane(PackageKind::Msi),
+            Some(InstallExecutionLane::WindowsMsi)
+        );
+        assert_eq!(
+            exclusive_install_lane(PackageKind::Msix),
+            Some(InstallExecutionLane::WindowsAppx)
+        );
     }
 
     fn workbuddy_detection(version: Option<&str>) -> Detection {
@@ -649,8 +1123,12 @@ mod tests {
                 "https://persistent.oaistatic.com/codex-app-prod/releases/26.727.6591.0/ChatGPT-x64.msix",
             )
             .unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: None,
+            expected_size: None,
             expected_sha256: None,
             detached_signature: None,
+            bootstrap_payload: None,
         }
     }
 
@@ -665,6 +1143,37 @@ mod tests {
             publisher: Some("CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B".into()),
             architecture: Some(Architecture::X64),
             evidence: "AppX:OpenAI.Codex".into(),
+        }
+    }
+
+    fn cc_switch_macos_candidate() -> ReleaseCandidate {
+        ReleaseCandidate {
+            product: ProductId::CcSwitch,
+            version: "3.19.1".into(),
+            architecture: Architecture::X64,
+            package_kind: PackageKind::TarGz,
+            download_url: Url::parse("https://dl.ccswitch.io/v3.19.1/CC-Switch-macOS.tar.gz")
+                .unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: None,
+            expected_size: None,
+            expected_sha256: None,
+            detached_signature: Some("untrusted comment: fixture".into()),
+            bootstrap_payload: None,
+        }
+    }
+
+    fn cc_switch_macos_detection() -> Detection {
+        Detection {
+            installed: true,
+            version: Some("3.19.1".into()),
+            managed: false,
+            management_known: true,
+            package_identity: Some("com.ccswitch.desktop".into()),
+            package_family: None,
+            publisher: Some("R8UR22V2F9".into()),
+            architecture: Some(Architecture::X64),
+            evidence: "用户 Applications · 已通过 Bundle/签名/Gatekeeper 检查".into(),
         }
     }
 
@@ -696,6 +1205,81 @@ mod tests {
         .unwrap();
         assert_eq!(result, "复检成功：5.3.8");
         assert_eq!(waits, 2);
+    }
+
+    #[test]
+    fn failed_detection_never_becomes_a_new_install_decision() {
+        let decision =
+            assess_existing_install(&Detection::failed("Windows AppX 查询失败"), "1.0.0");
+        assert!(
+            matches!(decision, PreinstallDecision::Reject(message) if message.contains("刷新状态"))
+        );
+    }
+
+    #[test]
+    fn workbuddy_macos_digest_policy_keeps_platform_verification_but_other_entries_fail() {
+        assert!(
+            evaluate_remote_digest(
+                RemoteDigestPolicy::EnforceIfPresent,
+                Some("expected"),
+                "actual"
+            )
+            .is_err()
+        );
+        let warning = evaluate_remote_digest(
+            RemoteDigestPolicy::PlatformSignatureOnly,
+            Some("expected"),
+            "actual",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(warning.contains("WorkBuddy macOS"));
+        assert_eq!(
+            evaluate_remote_digest(
+                RemoteDigestPolicy::PlatformSignatureOnly,
+                Some("same"),
+                "SAME"
+            )
+            .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn download_fallback_cannot_change_the_confirmed_chatgpt_release() {
+        let primary = ReleaseCandidate {
+            product: ProductId::ChatGpt,
+            version: "26.803.41515".into(),
+            architecture: Architecture::X64,
+            package_kind: PackageKind::Zip,
+            download_url: Url::parse(
+                "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-darwin-x64-26.803.41515.zip",
+            )
+            .unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: Some("12.0".into()),
+            expected_size: Some(539_372_355),
+            expected_sha256: None,
+            detached_signature: Some("vendor-signature".into()),
+            bootstrap_payload: None,
+        };
+        let mut fallback = primary.clone();
+        fallback.download_url = Url::parse(
+            "https://mirror.example/artifacts/chatgpt/macos/x64/26.803.41515/hash/ChatGPT-darwin-x64-26.803.41515.zip",
+        )
+        .unwrap();
+        fallback.source = ArtifactSource::VerifiedMirror {
+            synced_at_unix: 1_800_000_000,
+        };
+        fallback.expected_sha256 = Some("a".repeat(64));
+        validate_verified_download_fallback(&primary, &fallback).unwrap();
+
+        let mut changed_size = fallback.clone();
+        changed_size.expected_size = Some(539_372_356);
+        assert!(validate_verified_download_fallback(&primary, &changed_size).is_err());
+        let mut no_digest = fallback;
+        no_digest.expected_sha256 = None;
+        assert!(validate_verified_download_fallback(&primary, &no_digest).is_err());
     }
 
     #[test]
@@ -802,6 +1386,45 @@ mod tests {
     }
 
     #[test]
+    fn exact_version_packages_normalize_an_optional_fourth_component() {
+        let candidate = ReleaseCandidate {
+            product: ProductId::Claude,
+            version: "1.26832.0".into(),
+            architecture: Architecture::X64,
+            package_kind: PackageKind::Dmg,
+            download_url: Url::parse(
+                "https://downloads.claude.ai/releases/darwin/universal/1.26832.0/Claude.dmg",
+            )
+            .unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: None,
+            expected_size: None,
+            expected_sha256: None,
+            detached_signature: None,
+            bootstrap_payload: None,
+        };
+        let matching = ArtifactVerification {
+            signer_subject: Some("Anthropic".into()),
+            product_identity: "Claude".into(),
+            version: Some("1.26832.0.0".into()),
+            architecture: Some(Architecture::X64),
+        };
+        verify_candidate_artifact_version(&candidate, &matching).unwrap();
+
+        let older = ArtifactVerification {
+            version: Some("1.26831.0.0".into()),
+            ..matching.clone()
+        };
+        assert!(verify_candidate_artifact_version(&candidate, &older).is_err());
+
+        let missing = ArtifactVerification {
+            version: None,
+            ..matching
+        };
+        assert!(verify_candidate_artifact_version(&candidate, &missing).is_err());
+    }
+
+    #[test]
     fn chatgpt_postcheck_requires_exact_appx_identity_and_publisher() {
         let candidate = chatgpt_candidate();
         let registry = TrustRegistry::embedded().unwrap();
@@ -844,5 +1467,91 @@ mod tests {
             error,
             InstallOneError::Failed(message) if message.contains("publisher")
         ));
+    }
+
+    #[test]
+    fn macos_postcheck_requires_exact_bundle_team_architecture_and_version() {
+        let candidate = cc_switch_macos_candidate();
+        let registry = TrustRegistry::embedded().unwrap();
+        let trust = registry
+            .find(
+                ProductId::CcSwitch,
+                OperatingSystem::MacOs,
+                Architecture::X64,
+            )
+            .unwrap();
+
+        let artifact = ArtifactVerification {
+            signer_subject: Some("R8UR22V2F9".into()),
+            product_identity: "com.ccswitch.desktop".into(),
+            version: Some(candidate.version.clone()),
+            architecture: Some(candidate.architecture),
+        };
+        verify_candidate_artifact_version(&candidate, &artifact).unwrap();
+
+        let result = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            cc_switch_macos_detection,
+            |_| {},
+        )
+        .unwrap();
+        assert_eq!(result, "复检成功：3.19.1");
+
+        let mut wrong_bundle = cc_switch_macos_detection();
+        wrong_bundle.package_identity = Some("com.example.other".into());
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_bundle.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("Bundle ID")
+        ));
+
+        let mut wrong_team = cc_switch_macos_detection();
+        wrong_team.publisher = Some("UNEXPECTED".into());
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_team.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("Team ID")
+        ));
+
+        let mut wrong_architecture = cc_switch_macos_detection();
+        wrong_architecture.architecture = Some(Architecture::Arm64);
+        let error = wait_for_direct_postcheck_with(
+            &candidate,
+            trust,
+            1,
+            Duration::ZERO,
+            || wrong_architecture.clone(),
+            |_| {},
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            InstallOneError::Failed(message) if message.contains("应用架构")
+        ));
+
+        let changed_artifact = ArtifactVerification {
+            version: Some("3.19.0".into()),
+            ..artifact
+        };
+        assert!(verify_candidate_artifact_version(&candidate, &changed_artifact).is_err());
     }
 }

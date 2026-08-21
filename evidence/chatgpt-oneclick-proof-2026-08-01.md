@@ -1,6 +1,6 @@
 # ChatGPT one-click Windows proof — 2026-08-01
 
-> Historical/superseded evidence. This file records the former Store/WinGet design. The user replaced that contract on 2026-08-02 with the OpenAI official manifest + complete MSIX direct-install path. It must not be used as current implementation or acceptance evidence; see `chatgpt-direct-msix-proof-2026-08-02.md`.
+> Historical design evidence, reactivated in a narrower form on 2026-08-11. The current implementation again uses the fixed Store ID and trusted WinGet/App Installer background path, but it does not permit the former `winget download --skip-license` local-package fallback because the OpenAI package declares `appLicensing`. See `chatgpt-windows-store-recovery-2026-08-11.md`.
 
 ## Scope and safety
 
