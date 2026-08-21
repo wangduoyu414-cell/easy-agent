@@ -1,0 +1,16 @@
+{
+  "architecture": "x64",
+  "artifact_path": "artifacts/claude/windows/x64/1.26832.0/c91e8b5d92cf60aa5e688f4e6bb6053b247c29e252724034656a4889df97c814/ClaudeSetup.exe",
+  "first_seen_at_unix": 1786456482,
+  "generated_at_unix": 1786466760,
+  "last_successful_upstream_check_at_unix": 1786466760,
+  "os": "windows",
+  "payload_artifact_path": "artifacts/claude/windows/x64/1.26832.0/6dc210bca31b55c9fa307d11c6b13a42c7f3a3886ccc35ca2ecb7e9fceba0139/Claude.msix",
+  "payload_sha256": "6dc210bca31b55c9fa307d11c6b13a42c7f3a3886ccc35ca2ecb7e9fceba0139",
+  "payload_size": 266210150,
+  "product": "claude",
+  "schema": 2,
+  "sha256": "c91e8b5d92cf60aa5e688f4e6bb6053b247c29e252724034656a4889df97c814",
+  "size": 7020704,
+  "version": "1.26832.0"
+}

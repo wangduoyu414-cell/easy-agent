@@ -57,7 +57,7 @@ url_rules = [
   { host = "hermes-agent.nousresearch.com", exact_paths = ["/"] },
   { host = "hermes-assets.nousresearch.com", exact_paths = ["/Hermes-Setup.exe"] }
 ]
-package_kinds = ["exe"]
+package_kinds = ["exe", "msix"]
 signer_subjects = ["Nous Research Inc."]
 package_identity = "Hermes"
 
@@ -101,77 +101,115 @@ product = "claude"
 os = "windows"
 architecture = "x64"
 enabled = true
-status_reason = "官方 MSIX 稳定端点、Package Publisher/Family、产品身份和架构已固定"
+status_reason = "Claude 官方完整 MSIX、Anthropic 签名、目标架构和安装后 Package 身份已固定；安装阶段不再二次下载"
 entry_urls = ["https://claude.ai/api/desktop/win32/x64/msix/latest/redirect"]
 url_rules = [
   { host = "claude.ai", exact_paths = ["/api/desktop/win32/x64/msix/latest/redirect"] },
   { host = "downloads.claude.ai", path_prefixes = ["/releases/"] }
 ]
 package_kinds = ["msix"]
+signer_subjects = ["Anthropic, PBC"]
 package_identity = "Claude"
 package_family = "Claude_pzs8sxrjxfjjc"
-msix_publisher = "CN=&quot;Anthropic, PBC&quot;, O=&quot;Anthropic, PBC&quot;, L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US"
+msix_publisher = "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US"
+mirror_manifest_url = "https://43.161.214.205/manifests/claude/windows/x64/latest.json"
+mirror_manifest_signature_url = "https://43.161.214.205/manifests/claude/windows/x64/latest.json.minisig"
+mirror_artifact_base_url = "https://43.161.214.205/"
+mirror_url_rules = [
+  { host = "43.161.214.205", exact_paths = ["/manifests/claude/windows/x64/latest.json", "/manifests/claude/windows/x64/latest.json.minisig"], path_prefixes = ["/artifacts/claude/windows/x64/"] }
+]
+mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
+mirror_max_stale_seconds = 604800
 
 [[entries]]
 product = "claude"
 os = "windows"
 architecture = "arm64"
-enabled = false
-status_reason = "官方 MSIX 端点已确认，ARM64 Package Publisher/Family 与真机安装证据尚未固定"
+enabled = true
+status_reason = "Claude Windows ARM64 官方完整 MSIX、Anthropic 签名、目标架构和安装后 Package 身份已固定；安装阶段不再二次下载"
 entry_urls = ["https://claude.ai/api/desktop/win32/arm64/msix/latest/redirect"]
 url_rules = [
   { host = "claude.ai", exact_paths = ["/api/desktop/win32/arm64/msix/latest/redirect"] },
   { host = "downloads.claude.ai", path_prefixes = ["/releases/"] }
 ]
 package_kinds = ["msix"]
+signer_subjects = ["Anthropic, PBC"]
 package_identity = "Claude"
+package_family = "Claude_pzs8sxrjxfjjc"
+msix_publisher = "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\", L=San Francisco, S=California, C=US, SERIALNUMBER=4860621, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Delaware, OID.1.3.6.1.4.1.311.60.2.1.3=US"
+mirror_manifest_url = "https://43.161.214.205/manifests/claude/windows/arm64/latest.json"
+mirror_manifest_signature_url = "https://43.161.214.205/manifests/claude/windows/arm64/latest.json.minisig"
+mirror_artifact_base_url = "https://43.161.214.205/"
+mirror_url_rules = [
+  { host = "43.161.214.205", exact_paths = ["/manifests/claude/windows/arm64/latest.json", "/manifests/claude/windows/arm64/latest.json.minisig"], path_prefixes = ["/artifacts/claude/windows/arm64/"] }
+]
+mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
+mirror_max_stale_seconds = 604800
 
 [[entries]]
 product = "chat_gpt"
 os = "windows"
 architecture = "x64"
+distribution = "microsoft_store"
 enabled = true
-status_reason = "固定 OpenAI 官方更新清单、完整 MSIX 发布路径与 Package Identity/Publisher/Family"
-entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json"]
+status_reason = "固定微软 ChatGPT 安装器、OpenAI 完整 MSIX/离线许可证、Package Identity/Family/Publisher，以及安装后复检链"
+entry_urls = [
+  "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+  "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-x64.msix",
+  "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-License.xml"
+]
 url_rules = [
-  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/windows-store-update.json"], path_prefixes = ["/codex-app-prod/releases/"] }
+  { host = "get.microsoft.com", exact_paths = ["/installer/download/9PLM9XGG6VKS"] },
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/ChatGPT-x64.msix", "/codex-app-prod/ChatGPT-License.xml"] }
 ]
 package_kinds = ["msix"]
 package_identity = "OpenAI.Codex"
 package_family = "OpenAI.Codex_2p2nqsd0c76g0"
 msix_publisher = "CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B"
+store_id = "9PLM9XGG6VKS"
+web_installer_signer_subject = "Microsoft Corporation"
 
 [[entries]]
 product = "chat_gpt"
 os = "windows"
 architecture = "arm64"
-enabled = false
-status_reason = "OpenAI 官方 ARM64 完整 MSIX 已确认可达，仍需 ARM64 包内身份与干净机部署复检硬门"
-entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json"]
+distribution = "microsoft_store"
+enabled = true
+status_reason = "固定微软 ChatGPT 安装器、OpenAI ARM64 完整 MSIX/离线许可证、Package Identity/Family/Publisher，以及安装后复检链"
+entry_urls = [
+  "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+  "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-arm64.msix",
+  "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-License.xml"
+]
 url_rules = [
-  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/windows-store-update.json"], path_prefixes = ["/codex-app-prod/releases/"] }
+  { host = "get.microsoft.com", exact_paths = ["/installer/download/9PLM9XGG6VKS"] },
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/ChatGPT-arm64.msix", "/codex-app-prod/ChatGPT-License.xml"] }
 ]
 package_kinds = ["msix"]
 package_identity = "OpenAI.Codex"
 package_family = "OpenAI.Codex_2p2nqsd0c76g0"
 msix_publisher = "CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B"
+store_id = "9PLM9XGG6VKS"
+web_installer_signer_subject = "Microsoft Corporation"
 
-# macOS entries remain deliberately fail-closed after pinning the observed
-# Developer Team IDs; each status_reason records the remaining contract or
-# clean-machine Gatekeeper/install proof that must close before enablement.
+# macOS support is entry-scoped. Direct app bundles are enabled only after the
+# metadata, archive, Apple identity, architecture and activation paths close;
+# unresolved vendor contracts and bootstrap installers remain fail-closed.
 
 [[entries]]
 product = "work_buddy"
 os = "macos"
 architecture = "x64"
-enabled = false
-status_reason = "Intel ZIP 的应用名、Bundle ID、Developer Team ID、codesign 与 Gatekeeper 已固定；官方 API SHA-256 与 CDN 文件不一致，安装保持禁用"
+enabled = true
+status_reason = "Intel ZIP 的官方来源、Bundle ID、Developer Team ID、版本、架构、codesign 与 Gatekeeper 已固定；厂商错误摘要仅记录，安装依赖 Apple 平台签名"
 entry_urls = ["https://www.workbuddy.cn/v2/update?platform=workbuddy-darwin-x64"]
 url_rules = [
   { host = "www.workbuddy.cn", exact_paths = ["/v2/update"] },
   { host = "download.codebuddy.cn", path_prefixes = ["/workbuddy/saas/darwin-x64/"] }
 ]
 package_kinds = ["zip"]
+remote_digest_policy = "platform_signature_only"
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "WorkBuddy.app"
 macos_bundle_id = "com.workbuddy.workbuddy"
 macos_team_id = "FN2V63AD2J"
@@ -181,14 +219,16 @@ minimum_macos_version = "12.0"
 product = "work_buddy"
 os = "macos"
 architecture = "arm64"
-enabled = false
-status_reason = "Apple Silicon ZIP 的应用名、Bundle ID、Developer Team ID、codesign 与 Gatekeeper 已固定；官方 API SHA-256 与 CDN 文件不一致，安装保持禁用"
+enabled = true
+status_reason = "Apple Silicon ZIP 的官方来源、Bundle ID、Developer Team ID、版本、架构、codesign 与 Gatekeeper 已固定；厂商错误摘要仅记录，安装依赖 Apple 平台签名"
 entry_urls = ["https://www.workbuddy.cn/v2/update?platform=workbuddy-darwin-arm64"]
 url_rules = [
   { host = "www.workbuddy.cn", exact_paths = ["/v2/update"] },
   { host = "download.codebuddy.cn", path_prefixes = ["/workbuddy/saas/darwin-arm64/"] }
 ]
 package_kinds = ["zip"]
+remote_digest_policy = "platform_signature_only"
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "WorkBuddy.app"
 macos_bundle_id = "com.workbuddy.workbuddy"
 macos_team_id = "FN2V63AD2J"
@@ -217,6 +257,7 @@ url_rules = [
   { host = "hermes-assets.nousresearch.com", exact_paths = ["/Hermes-Setup.dmg"] }
 ]
 package_kinds = ["dmg"]
+macos_install_strategy = "vendor_bootstrap"
 macos_application_name = "Hermes.app"
 macos_bundle_id = "com.nousresearch.hermes.setup"
 macos_team_id = "T2F6S8MF7C"
@@ -226,8 +267,8 @@ minimum_macos_version = "12.0"
 product = "cc_switch"
 os = "macos"
 architecture = "x64"
-enabled = false
-status_reason = "官方签名清单、Universal tar.gz、公钥、Bundle ID 与 Developer Team ID 已固定；Intel 真机安装复检待完成"
+enabled = true
+status_reason = "官方签名清单、Universal tar.gz、minisign、公钥、Bundle ID、Developer Team ID、双架构与直接应用包激活链已验证"
 entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
 url_rules = [
   { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
@@ -236,6 +277,7 @@ url_rules = [
   { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
 ]
 package_kinds = ["tar_gz"]
+macos_install_strategy = "direct_app_bundle"
 updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
 macos_application_name = "CC Switch.app"
 macos_bundle_id = "com.ccswitch.desktop"
@@ -246,8 +288,8 @@ minimum_macos_version = "12.0"
 product = "cc_switch"
 os = "macos"
 architecture = "arm64"
-enabled = false
-status_reason = "官方签名清单、Universal tar.gz、公钥、Bundle ID 与 Developer Team ID 已固定；Apple Silicon 真机安装复检待完成"
+enabled = true
+status_reason = "官方签名清单、Universal tar.gz、minisign、公钥、Bundle ID、Developer Team ID、双架构与直接应用包激活链已验证"
 entry_urls = ["https://dl.ccswitch.io/latest.json", "https://github.com/farion1231/cc-switch/releases/latest/download/latest.json"]
 url_rules = [
   { host = "dl.ccswitch.io", exact_paths = ["/latest.json"], path_prefixes = ["/v"] },
@@ -256,6 +298,7 @@ url_rules = [
   { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
 ]
 package_kinds = ["tar_gz"]
+macos_install_strategy = "direct_app_bundle"
 updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4MDI4QzlBNTczOTI4RTMKUldUaktEbFhtb3dDeUM5US9kT0FmdGR5Ti9vQzcwa2dTMlpibDVDUmQ2M0VGTzVOWnd0SGpFVlEK"
 macos_application_name = "CC Switch.app"
 macos_bundle_id = "com.ccswitch.desktop"
@@ -266,64 +309,102 @@ minimum_macos_version = "12.0"
 product = "claude"
 os = "macos"
 architecture = "x64"
-enabled = false
-status_reason = "官方 Universal DMG 的 Bundle ID、Developer Team ID、双 slice、codesign 与 Gatekeeper 已固定；稳定端点当前触发 Cloudflare challenge，Intel 安装复检待完成"
+enabled = true
+status_reason = "Claude Universal DMG、应用身份、Apple Team、版本、Intel/M 芯片双切片、codesign 与 Gatekeeper 验证链已固定"
 entry_urls = ["https://claude.ai/api/desktop/darwin/universal/dmg/latest/redirect"]
 url_rules = [
   { host = "claude.ai", exact_paths = ["/api/desktop/darwin/universal/dmg/latest/redirect"] },
   { host = "downloads.claude.ai", path_prefixes = ["/releases/darwin/universal/"] }
 ]
 package_kinds = ["dmg"]
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "Claude.app"
 macos_bundle_id = "com.anthropic.claudefordesktop"
 macos_team_id = "Q6L2SF6YDW"
 minimum_macos_version = "12.0"
+mirror_manifest_url = "https://43.161.214.205/manifests/claude/macos/x64/latest.json"
+mirror_manifest_signature_url = "https://43.161.214.205/manifests/claude/macos/x64/latest.json.minisig"
+mirror_artifact_base_url = "https://43.161.214.205/"
+mirror_url_rules = [
+  { host = "43.161.214.205", exact_paths = ["/manifests/claude/macos/x64/latest.json", "/manifests/claude/macos/x64/latest.json.minisig"], path_prefixes = ["/artifacts/claude/macos/x64/"] }
+]
+mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
+mirror_max_stale_seconds = 604800
 
 [[entries]]
 product = "claude"
 os = "macos"
 architecture = "arm64"
-enabled = false
-status_reason = "官方 Universal DMG 的 Bundle ID、Developer Team ID、双 slice、codesign 与 Gatekeeper 已固定；稳定端点当前触发 Cloudflare challenge，Apple Silicon 安装复检待完成"
+enabled = true
+status_reason = "Claude Universal DMG、应用身份、Apple Team、版本、Intel/M 芯片双切片、codesign 与 Gatekeeper 验证链已固定"
 entry_urls = ["https://claude.ai/api/desktop/darwin/universal/dmg/latest/redirect"]
 url_rules = [
   { host = "claude.ai", exact_paths = ["/api/desktop/darwin/universal/dmg/latest/redirect"] },
   { host = "downloads.claude.ai", path_prefixes = ["/releases/darwin/universal/"] }
 ]
 package_kinds = ["dmg"]
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "Claude.app"
 macos_bundle_id = "com.anthropic.claudefordesktop"
 macos_team_id = "Q6L2SF6YDW"
 minimum_macos_version = "12.0"
+mirror_manifest_url = "https://43.161.214.205/manifests/claude/macos/arm64/latest.json"
+mirror_manifest_signature_url = "https://43.161.214.205/manifests/claude/macos/arm64/latest.json.minisig"
+mirror_artifact_base_url = "https://43.161.214.205/"
+mirror_url_rules = [
+  { host = "43.161.214.205", exact_paths = ["/manifests/claude/macos/arm64/latest.json", "/manifests/claude/macos/arm64/latest.json.minisig"], path_prefixes = ["/artifacts/claude/macos/arm64/"] }
+]
+mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
+mirror_max_stale_seconds = 604800
 
 [[entries]]
 product = "chat_gpt"
 os = "macos"
 architecture = "x64"
-enabled = false
-status_reason = "OpenAI Intel appcast、应用名、Bundle ID、Developer Team ID、codesign 与 Gatekeeper 已固定；macOS 14 干净安装/更新复检待完成"
+enabled = true
+status_reason = "OpenAI Intel appcast、Sparkle Ed25519、ZIP、应用名、Bundle ID、Developer Team ID、版本、x64 slice、codesign、Gatekeeper 与直接应用包激活链已验证"
 entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/appcast-x64.xml"]
 url_rules = [
   { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/appcast-x64.xml"], path_prefixes = ["/codex-app-prod/ChatGPT-darwin-x64-"] }
 ]
 package_kinds = ["zip"]
+sparkle_ed25519_public_key = "mNfr1v9t63BfgDtlw4C8lRvSY6uMggIXABDOCi3tS6k="
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "ChatGPT.app"
 macos_bundle_id = "com.openai.codex"
 macos_team_id = "2DC432GLL2"
-minimum_macos_version = "14.0"
+minimum_macos_version = "13.0"
+mirror_manifest_url = "https://43.161.214.205/manifests/chatgpt/macos/x64/latest.json"
+mirror_manifest_signature_url = "https://43.161.214.205/manifests/chatgpt/macos/x64/latest.json.minisig"
+mirror_artifact_base_url = "https://43.161.214.205/"
+mirror_url_rules = [
+  { host = "43.161.214.205", exact_paths = ["/manifests/chatgpt/macos/x64/latest.json", "/manifests/chatgpt/macos/x64/latest.json.minisig"], path_prefixes = ["/artifacts/chatgpt/macos/x64/"] }
+]
+mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
+mirror_max_stale_seconds = 604800
 
 [[entries]]
 product = "chat_gpt"
 os = "macos"
 architecture = "arm64"
-enabled = false
-status_reason = "OpenAI Apple Silicon appcast、ARM64 ZIP、应用名、Bundle ID、Developer Team ID、codesign 与 Gatekeeper 已固定；macOS 14 真机安装/更新复检待完成"
+enabled = true
+status_reason = "OpenAI Apple Silicon appcast、Sparkle Ed25519、ZIP、应用名、Bundle ID、Developer Team ID、版本、ARM64 slice、codesign、Gatekeeper 与直接应用包激活链已验证"
 entry_urls = ["https://persistent.oaistatic.com/codex-app-prod/appcast.xml"]
 url_rules = [
   { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/appcast.xml"], path_prefixes = ["/codex-app-prod/ChatGPT-darwin-arm64-"] }
 ]
 package_kinds = ["zip"]
+sparkle_ed25519_public_key = "mNfr1v9t63BfgDtlw4C8lRvSY6uMggIXABDOCi3tS6k="
+macos_install_strategy = "direct_app_bundle"
 macos_application_name = "ChatGPT.app"
 macos_bundle_id = "com.openai.codex"
 macos_team_id = "2DC432GLL2"
-minimum_macos_version = "14.0"
+minimum_macos_version = "13.0"
+mirror_manifest_url = "https://43.161.214.205/manifests/chatgpt/macos/arm64/latest.json"
+mirror_manifest_signature_url = "https://43.161.214.205/manifests/chatgpt/macos/arm64/latest.json.minisig"
+mirror_artifact_base_url = "https://43.161.214.205/"
+mirror_url_rules = [
+  { host = "43.161.214.205", exact_paths = ["/manifests/chatgpt/macos/arm64/latest.json", "/manifests/chatgpt/macos/arm64/latest.json.minisig"], path_prefixes = ["/artifacts/chatgpt/macos/arm64/"] }
+]
+mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
+mirror_max_stale_seconds = 604800

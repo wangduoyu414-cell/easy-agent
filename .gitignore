@@ -3,5 +3,9 @@
 !/dist/.gitkeep
 !/dist/README.md
 /evidence/runtime/
+.DS_Store
+/.vibex-companion/
+__pycache__/
+*.py[cod]
 *.log
 *.part

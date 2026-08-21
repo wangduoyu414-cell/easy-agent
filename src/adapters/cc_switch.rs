@@ -4,7 +4,9 @@ use base64::Engine;
 use serde::Deserialize;
 use url::Url;
 
-use crate::core::{Architecture, OperatingSystem, PackageKind, ProductId, ReleaseCandidate};
+use crate::core::{
+    Architecture, ArtifactSource, OperatingSystem, PackageKind, ProductId, ReleaseCandidate,
+};
 
 use super::AdapterError;
 
@@ -77,7 +79,11 @@ pub fn parse_cc_switch_manifest(
         architecture,
         package_kind,
         download_url,
+        source: ArtifactSource::Official,
+        minimum_macos_version: None,
+        expected_size: None,
         expected_sha256: None,
         detached_signature: Some(signature),
+        bootstrap_payload: None,
     })
 }

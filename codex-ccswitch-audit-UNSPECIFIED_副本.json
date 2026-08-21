@@ -1,0 +1,231 @@
+{
+  "schema_version": "codex-ccswitch-audit-v1",
+  "machine_label": "UNSPECIFIED",
+  "generated_at_utc": "2026-08-13T07:56:46Z",
+  "collection_mode": "read_only",
+  "host": {
+    "status": "error",
+    "target_platform": "Windows",
+    "observed_platform": {
+      "name": "Darwin",
+      "release": "25.4.0",
+      "os_version": "26.4.1",
+      "build": "25E253",
+      "architecture": "x86_64"
+    },
+    "platform_match": false,
+    "local_time": "2026-08-13T15:56:46+08:00",
+    "utc_time": "2026-08-13T07:56:46Z",
+    "timezone": "Asia/Shanghai",
+    "hostname": {
+      "state": "present",
+      "length": 20,
+      "fingerprint": "15850ec3a455a433"
+    },
+    "current_user": {
+      "state": "present",
+      "length": 5,
+      "fingerprint": "a76a8a679d455dbf"
+    },
+    "windows_version": null,
+    "windows_build": null,
+    "default_browser_progid": null,
+    "localhost_1455_occupied": null,
+    "oauth_callback_firewall_rules_present": null
+  },
+  "time_sync": {
+    "status": "unsupported",
+    "safe_detail": "Windows time synchronization state was not collected because the observed host is not Windows."
+  },
+  "software": {
+    "status": "skipped_by_policy",
+    "safe_detail": "Windows Codex, Desktop/MSIX, extension, npm, wrapper, and process-version inventory was not run after the platform preflight failed."
+  },
+  "running_processes": [],
+  "config_sources": [],
+  "effective_runtime": {
+    "status": "skipped_by_policy",
+    "safe_detail": "Runtime session metadata was not collected because this task is not running on the requested Windows host."
+  },
+  "codex_config": {
+    "status": "skipped_by_policy",
+    "safe_detail": "Codex configuration and policy sources were not inspected after the platform mismatch was confirmed."
+  },
+  "authentication": {
+    "status": "skipped_by_policy",
+    "safe_detail": "No login status command, credential-store inspection, login, logout, refresh, or token parsing was performed."
+  },
+  "ccswitch": {
+    "status": "skipped_by_policy",
+    "safe_detail": "Windows CC Switch settings, database records, provider state, takeover state, health, and logs were not collected."
+  },
+  "model_catalogs": {
+    "status": "skipped_by_policy",
+    "safe_detail": "No model catalog or model cache was read."
+  },
+  "environment_variables": [],
+  "proxy": {
+    "status": "skipped_by_policy",
+    "safe_detail": "Windows Process/User/Machine environment scopes, WinHTTP, Internet Settings, and Clash configuration were not inspected."
+  },
+  "dns": {
+    "status": "skipped_by_policy",
+    "safe_detail": "No DNS or hosts-file checks were run."
+  },
+  "tls": {
+    "status": "skipped_by_policy",
+    "safe_detail": "No TLS connections or certificate metadata checks were run."
+  },
+  "network_connections": [],
+  "endpoint_probes": {
+    "status": "skipped_by_policy",
+    "unauthenticated": {
+      "executed": false,
+      "reason": "platform_mismatch"
+    },
+    "authenticated": {
+      "executed": false,
+      "reason": "disabled_by_policy"
+    },
+    "allow_authenticated_models_probe": false
+  },
+  "invariants": {
+    "official_chatgpt_login_present": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "official_auth_cache_present": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "third_party_provider_active": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "provider_token_present": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "provider_token_matches_ccswitch": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "official_auth_preservation_enabled": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "custom_model_catalog_forced": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "local_model_catalog_readable": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "ccswitch_listener_present": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "ccswitch_codex_takeover_active": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "codex_points_to_ccswitch_local_route": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "system_proxy_enabled": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "environment_proxy_enabled": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "upstream_reachable_unauthenticated": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "authenticated_models_probe_executed": {
+      "value": false,
+      "status": "confirmed",
+      "evidence_refs": [
+        "endpoint_probes.authenticated"
+      ]
+    },
+    "runtime_model_matches_disk_default": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "runtime_provider_matches_disk_provider": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "multiple_codex_versions_detected": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    },
+    "stale_endpoint_records_present": {
+      "value": null,
+      "status": "unknown",
+      "evidence_refs": []
+    }
+  },
+  "mismatches": [
+    {
+      "id": "platform_mismatch",
+      "severity": "blocker",
+      "summary": "The requested Windows audit was launched on a macOS (Darwin) host.",
+      "evidence_refs": [
+        "host.target_platform",
+        "host.observed_platform",
+        "host.platform_match"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "machine_label_unspecified",
+      "severity": "warning",
+      "summary": "The machine label placeholder was not replaced; UNSPECIFIED was used for the report filenames and metadata.",
+      "evidence_refs": [
+        "machine_label"
+      ],
+      "confidence": "confirmed"
+    }
+  ],
+  "collection_errors": [
+    {
+      "stage": "platform_preflight",
+      "code": "platform_mismatch",
+      "error_type": "UnsupportedHostPlatform",
+      "exit_code": null,
+      "fatal": true,
+      "safe_detail": "Expected Windows; observed Darwin. Collection stopped before inspecting Windows-specific configuration, credentials, databases, logs, registry, environment scopes, proxy state, DNS, TLS, or endpoints."
+    },
+    {
+      "stage": "input_validation",
+      "code": "machine_label_missing",
+      "error_type": "MissingRequiredLabel",
+      "exit_code": null,
+      "fatal": false,
+      "safe_detail": "The request retained the machine-label placeholder, so the bounded fallback label UNSPECIFIED was used."
+    }
+  ]
+}

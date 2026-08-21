@@ -38,15 +38,15 @@ jobs:
         run: |
           lipo -info "dist/easy agent.app/Contents/MacOS/easy-agent"
           codesign --verify --deep --strict --verbose=2 "dist/easy agent.app"
-          codesign --verify --verbose=2 "dist/easy-agent-macos-universal.dmg"
-          shasum -a 256 "dist/easy-agent-macos-universal.dmg"
+          codesign --verify --verbose=2 "dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg"
+          shasum -a 256 "dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg"
 
       - name: Upload validation DMG
         uses: actions/upload-artifact@v6
         with:
           name: easy-agent-macos-universal-validation
           path: |
-            dist/easy-agent-macos-universal.dmg
-            dist/SHA256SUMS-macos-universal.txt
+            dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg
+            dist/SHA256SUMS-macos-universal-UNNOTARIZED-VALIDATION.txt
           if-no-files-found: error
           retention-days: 7

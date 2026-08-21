@@ -1,7 +1,9 @@
 use serde::Deserialize;
 use url::Url;
 
-use crate::core::{Architecture, OperatingSystem, PackageKind, ProductId, ReleaseCandidate};
+use crate::core::{
+    Architecture, ArtifactSource, OperatingSystem, PackageKind, ProductId, ReleaseCandidate,
+};
 
 use super::AdapterError;
 
@@ -62,10 +64,14 @@ pub fn parse_workbuddy_update(
         architecture,
         package_kind,
         download_url,
+        source: ArtifactSource::Official,
+        minimum_macos_version: None,
+        expected_size: None,
         expected_sha256: [release.sha256, release.sha256hash, release.hash]
             .into_iter()
             .flatten()
             .find(|value| !value.trim().is_empty()),
         detached_signature: None,
+        bootstrap_payload: None,
     })
 }

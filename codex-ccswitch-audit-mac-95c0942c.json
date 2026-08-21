@@ -1,0 +1,242 @@
+{
+  "schema_version": "codex-ccswitch-audit-v1",
+  "machine_label": "mac-95c0942c",
+  "generated_at_utc": "2026-08-13T09:15:00Z",
+  "collection_mode": "read_only",
+  "host": {
+    "platform": "macOS",
+    "product_version": "26.4.1",
+    "build": "25E253",
+    "kernel": "Darwin 25.4.0 RELEASE_X86_64",
+    "architecture": "x86_64",
+    "arch_command": "i386",
+    "intel": true,
+    "apple_silicon": false,
+    "sysctl_proc_translated": null,
+    "hostname": {"state": "present", "length": 20, "fingerprint": "15850ec3a455a433"},
+    "cwd": "~/easy agent",
+    "oauth_callback_1455_occupied": false
+  },
+  "time_sync": {
+    "status": "permission_denied",
+    "local_time": "2026-08-13T17:08:29+08:00",
+    "utc_time": "2026-08-13T09:08:29Z",
+    "utc_offset": "+08:00",
+    "system_timezone": "Asia/Shanghai",
+    "process_TZ": {"state": "absent", "length": 0},
+    "launchctl_TZ": {"state": "absent", "length": 0},
+    "safe_detail": "systemsetup returned an administrator-access message; timezone and clock consistency were verified from date and /etc/localtime."
+  },
+  "software": {
+    "applications": [
+      {"path": "/Applications/Codex.app", "version": "26.730.61639", "bundle_id": "com.openai.codex", "architecture": "x86_64", "signature_valid": true},
+      {"path": "/Applications/ChatGPT.app", "version": "26.803.81509", "bundle_id": "com.openai.codex", "architecture": "x86_64", "signature_valid": true},
+      {"path": "/Applications/CC Switch.app", "version": "3.19.2", "bundle_id": "com.ccswitch.desktop", "architecture": "universal x86_64/arm64", "signature_valid": true},
+      {"path": "/Applications/Clash Verge.app", "version": "2.5.2", "bundle_id": "io.github.clash-verge-rev.clash-verge-rev", "architecture": "x86_64", "signature_valid": true}
+    ],
+    "codex_installations": [
+      {"kind": "desktop_embedded", "path": "/Applications/Codex.app/Contents/Resources/codex", "version": "codex-cli 0.147.0-alpha.1.2", "architecture": "x86_64", "signature_valid": true},
+      {"kind": "npm_shell", "path": "~/.local/npm-global/bin/codex", "real_path": "~/.local/npm-global/lib/node_modules/@openai/codex/bin/codex.js", "version": "codex-cli 0.147.0", "architecture": "Node.js launcher; vendor binary x86_64", "signature_valid": false}
+    ],
+    "shell_default_codex": "~/.local/npm-global/bin/codex",
+    "desktop_embedded_codex": "/Applications/Codex.app/Contents/Resources/codex",
+    "ide_extensions": []
+  },
+  "running_processes": [
+    {"pid": 1669, "ppid": 1, "process": "Codex Desktop", "executable_path": "/Applications/Codex.app/Contents/MacOS/ChatGPT", "start_time": "2026-08-11T04:39:36+08:00", "architecture": "x86_64", "override_flags": []},
+    {"pid": 1734, "ppid": 1669, "process": "codex", "executable_path": "/Applications/Codex.app/Contents/Resources/codex", "start_time": "2026-08-11T04:39:39+08:00", "architecture": "x86_64", "override_flags": ["-c", "--analytics-default-enabled"]},
+    {"pid": 893, "ppid": 1, "process": "cc-switch", "executable_path": "/Applications/CC Switch.app/Contents/MacOS/cc-switch", "start_time": "2026-08-11T04:37:05+08:00", "architecture": "x86_64 native", "override_flags": []},
+    {"pid": 887, "ppid": 1, "process": "clash-verge", "executable_path": "/Applications/Clash Verge.app/Contents/MacOS/clash-verge", "start_time": "2026-08-11T04:37:04+08:00", "architecture": "x86_64"},
+    {"pid": 1018, "ppid": 292, "process": "verge-mihomo", "executable_path": "/Applications/Clash Verge.app/Contents/MacOS/verge-mihomo", "start_time": "2026-08-11T04:37:12+08:00", "architecture": "x86_64"}
+  ],
+  "config_sources": [
+    {"kind": "user", "path": "~/.codex/config.toml", "exists": true, "size": 4510, "mode": "0600", "modified_at_utc": "2026-08-12T20:37:05.210056Z", "parse_valid": true, "safe_fields": {"model": "gpt-5.6-sol", "model_provider": "codexmanager_server", "model_catalog_json": "~/.codex/models_catalog.json", "service_tier": "priority", "model_reasoning_effort": "ultra"}},
+    {"kind": "project", "path": "~/easy agent/.codex/config.toml", "exists": false},
+    {"kind": "managed", "path": "/etc/codex/managed_config.toml", "exists": false},
+    {"kind": "requirements", "path": "/etc/codex/requirements.toml", "exists": false},
+    {"kind": "mdm_preferences", "path": "~/Library/Preferences/com.openai.codex.plist", "exists": true, "managed_keys_present": []},
+    {"kind": "mdm_preferences", "path": "~/Library/Managed Preferences/com.openai.codex.plist", "exists": false},
+    {"kind": "mdm_preferences", "path": "/Library/Managed Preferences/com.openai.codex.plist", "exists": false}
+  ],
+  "effective_runtime": {
+    "status": "confirmed",
+    "session_id_fingerprint": "48eba17f49bdf40d",
+    "timestamp": "2026-08-13T08:48:13.807Z",
+    "cwd": "~/easy agent",
+    "originator": "Codex Desktop",
+    "cli_version": "0.147.0-alpha.1.2",
+    "model_provider": "codexmanager_server",
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "service_tier": "default",
+    "realtime_active": false,
+    "parse_error_count": 0,
+    "runtime_config_stale_or_thread_pinned": true,
+    "safe_detail": "Runtime model/provider match disk; runtime reasoning effort and service tier differ from current disk defaults."
+  },
+  "codex_config": {
+    "codex_home": "~/.codex",
+    "codex_home_source": "default",
+    "effective_fields": {"model": "gpt-5.6-sol", "model_provider": "codexmanager_server", "model_catalog_json": "~/.codex/models_catalog.json", "service_tier": "priority", "model_reasoning_effort": "ultra", "cli_auth_credentials_store": "auto"},
+    "provider": {"provider_id": "codexmanager_server", "name": "Codex Manager", "base_url": "https://49.232.229.239/codex/v1", "wire_api": "responses", "requires_openai_auth": null, "env_key": null, "experimental_bearer_token": {"state": "present", "length": 64, "fingerprint": "6c69c569fa3da1c6"}},
+    "command_line_overrides": {"profile": false, "model": false, "provider_or_auth_config_present": true, "values_redacted": true}
+  },
+  "authentication": {
+    "login_status": [
+      {"binary_path": "/Applications/Codex.app/Contents/Resources/codex", "status": "ChatGPT", "exit_code": 0},
+      {"binary_path": "~/.local/npm-global/bin/codex", "status": "ChatGPT", "exit_code": 0}
+    ],
+    "auth_mode": "chatgpt",
+    "auth_store_mode": "auto",
+    "auth_file": {"path": "~/.codex/auth.json", "exists": true, "size": 4499, "mode": "0600", "modified_at_utc": "2026-08-11T05:05:39.539184Z", "top_level_keys": ["OPENAI_API_KEY", "auth_mode", "last_refresh", "tokens"]},
+    "OPENAI_API_KEY": {"state": "absent"},
+    "id_token": {"state": "present", "length": 2213, "fingerprint": "0b409c459ff01fcb"},
+    "access_token": {"state": "present", "length": 1842, "fingerprint": "bd33a35853da2ec7"},
+    "refresh_token": {"state": "present", "length": 196, "fingerprint": "647f01477db30700"},
+    "account_id": {"state": "present", "length": 36, "fingerprint": "8b1d4771086116f0"},
+    "last_refresh": "2026-08-03T16:08:06.775034Z",
+    "jwt_metadata": {"issuer": "https://auth.openai.com", "audience": ["app_EMoamEEZ73f0CkXaXp7hrann"], "issued_at": 1785773247, "expires_at": 1785776847, "plan_type": "pro", "compute_residency": null, "mfa_required": null},
+    "keychain": {"service": "Codex Auth", "account_fingerprint": "2a15432168617201", "status": "absent"},
+    "dual_auth_stores": false
+  },
+  "ccswitch": {
+    "version": "3.19.2",
+    "data_dir": "~/.cc-switch",
+    "data_dir_source": "default",
+    "settings_file": {"path": "~/.cc-switch/settings.json", "exists": true, "size": 1018, "mode": "0600", "modified_at_utc": "2026-08-11T05:03:55.051970Z"},
+    "database_file": {"path": "~/.cc-switch/cc-switch.db", "exists": true, "size": 35176448, "mode": "0644", "modified_at_utc": "2026-08-13T09:09:05.849506Z"},
+    "open_files": ["~/.cc-switch/logs/cc-switch.log", "~/.cc-switch/cc-switch.db"],
+    "settings": {"showInTray": true, "minimizeToTrayOnClose": true, "launchOnStartup": true, "enableLocalProxy": true, "enableFailoverToggle": false, "showProfileSwitcher": true, "preserveCodexOfficialAuthOnSwitch": true, "unifyCodexSessionHistory": false, "currentProviderCodex": "default"},
+    "current_provider": {"id_fingerprint": "4596d9de47280be8", "name": "codex", "category": "custom", "base_url": "https://49.232.229.239/codex/v1", "wire_api": "responses", "token": {"state": "present", "length": 64, "fingerprint": "6c69c569fa3da1c6"}, "token_matches_effective_config": true, "auth_snapshot_present": true, "auth_mode": "chatgpt", "auth_last_refresh": "2026-08-03T16:08:06.775034Z", "snapshot_account_same": true, "snapshot_access_same": true, "snapshot_refresh_same": true, "meta": {"commonConfigEnabled": false, "endpointAutoSelect": true, "apiFormat": "openai_responses"}},
+    "providers": [{"id_fingerprint": "4596d9de47280be8", "name": "codex", "is_current": true, "category": "custom", "website_url": "https://49.232.229.239/codex", "settings_config_length": 8993, "settings_config_valid_json": true}, {"id_fingerprint": "007a8d06a48bd2e4", "name": "OpenAI Official", "is_current": false, "category": "official", "website_url": "https://chatgpt.com/codex", "settings_config_length": 5953, "settings_config_valid_json": true}],
+    "provider_endpoints": [],
+    "proxy": {"proxy_enabled": 0, "listen_address": "127.0.0.1", "listen_port": 15721, "enable_logging": 1, "enabled": 0, "auto_failover_enabled": 0, "max_retries": 3, "streaming_first_byte_timeout": 60, "streaming_idle_timeout": 120, "non_streaming_timeout": 600, "live_takeover_active": 0, "updated_at": "2026-08-11 05:05:39"},
+    "listener_present": false,
+    "health": null,
+    "stream_checks": [],
+    "request_log_aggregates": [{"data_source": "codex_session", "model": "gpt-5.6-sol", "status_code": 200, "count": 59101}, {"data_source": "codex_session", "model": "gpt-5.6-terra", "status_code": 200, "count": 4292}],
+    "local_migrations": {"codexThirdPartyHistoryProviderBucketV1": {"completedAt": "2026-08-03T15:15:27.942859+00:00", "migratedJsonlFiles": 0, "migratedStateRows": 0, "scannedHistoryFiles": true}, "codexProviderTemplateV1": {"completedAt": "2026-08-03T15:15:27.943913+00:00"}}
+  },
+  "model_catalogs": {
+    "remote_cache": {"path": "~/.codex/models_cache.json", "exists": true, "readable": true, "sha256": "28bdbe4d28e6e80c27ca703525d0e3b3c0310a4a138899eb52a7f3380e6e6a71", "modified_at_utc": "2026-08-08T06:11:20.306304Z", "fetched_at": "2026-08-08T06:11:20.304655Z", "client_version": "0.147.0", "total": 9, "visible_count": 7, "hidden_count": 2, "model_ids": ["gpt-5.6-sol", "gpt-5.6-sol-wm", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark", "codex-auto-review"]},
+    "forced_catalog": {"path": "~/.codex/models_catalog.json", "exists": true, "readable": true, "sha256": "7385a7c8723d65be8dc322a34935a3b2863c25983452dfff06a712b6aa71f7c4", "modified_at_utc": "2026-07-27T10:55:58.951501Z", "fetched_at": "2026-07-27T10:55:58.949746700Z", "client_version": "0.146.0", "total": 30, "visible_count": 21, "hidden_count": 9, "model_ids": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark", "codex-auto-review", "grok-composer-2.5-fast", "gpt-image-1.5", "gpt-image-2", "grok-3-mini", "grok-3-mini-fast", "grok-4.20-0309-non-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-multi-agent-0309", "grok-4.3", "grok-4.5", "grok-build-0.1", "grok-imagine-image", "grok-imagine-image-quality", "grok-imagine-video", "grok-imagine-video-1.5-preview", "kimi-k2", "kimi-k2-thinking", "kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"]},
+    "upstream_models": {"probe_executed": true, "total": 32, "model_ids": ["kimi-k2", "gpt-5.4", "gpt-image-2", "grok-4.20-0309-reasoning", "gpt-5.5", "gpt-5.6-terra", "grok-build-0.1", "grok-3-mini-fast", "grok-4.6", "gpt-5.3-codex-spark", "grok-4.20-0309-non-reasoning", "grok-3-mini", "kimi-k2.7-code", "gpt-5.4-mini", "gpt-5.6-luna", "grok-4.5", "grok-4.3", "grok-composer-2.5-fast", "grok-imagine-image", "gpt-5.6-sol", "grok-imagine-image-quality", "kimi-k3-256k", "kimi-k2-thinking", "kimi-k2.6", "kimi-k2.7-code-highspeed", "codex-auto-review", "grok-4.20-multi-agent-0309", "kimi-k3", "kimi-k2.5", "gpt-image-1.5", "grok-imagine-video", "grok-imagine-video-1.5-preview"]},
+    "only_in_forced_vs_cache": ["gpt-image-1.5", "gpt-image-2", "grok-3-mini", "grok-3-mini-fast", "grok-4.20-0309-non-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-multi-agent-0309", "grok-4.3", "grok-4.5", "grok-build-0.1", "grok-composer-2.5-fast", "grok-imagine-image", "grok-imagine-image-quality", "grok-imagine-video", "grok-imagine-video-1.5-preview", "kimi-k2", "kimi-k2-thinking", "kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"],
+    "only_in_cache_vs_forced": ["gpt-5.6-sol-wm"],
+    "only_upstream_not_in_forced": ["grok-4.6", "kimi-k3-256k"],
+    "disk_default_model": "gpt-5.6-sol",
+    "runtime_model": "gpt-5.6-sol",
+    "runtime_matches_disk_default": true
+  },
+  "environment_variables": [
+    {"scope": "current_process", "name": "CODEX_HOME", "state": "absent", "length": 0},
+    {"scope": "launchctl", "name": "CODEX_HOME", "state": "absent", "length": 0},
+    {"scope": "Codex Desktop", "name": "CODEX_HOME", "state": "absent", "length": 0},
+    {"scope": "CC Switch", "name": "CODEX_HOME", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "OPENAI_API_KEY", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "CODEX_API_KEY", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "HTTP_PROXY", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "HTTPS_PROXY", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "ALL_PROXY", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "NO_PROXY", "state": "present", "length": 9, "fingerprint": "7b4813cd985b3c61"},
+    {"scope": "Codex Desktop", "name": "NO_PROXY", "state": "present", "length": 9, "fingerprint": "7b4813cd985b3c61"},
+    {"scope": "launchctl", "name": "TZ", "state": "absent", "length": 0},
+    {"scope": "current_process", "name": "CC_SWITCH_CONFIG_DIR", "state": "absent", "length": 0}
+  ],
+  "proxy": {
+    "system": {"HTTPEnable": 0, "HTTPSEnable": 0, "SOCKSEnable": 0, "ProxyAutoConfigEnable": 0},
+    "explicit_system_proxy_enabled": false,
+    "environment_proxy_enabled": false,
+    "transparent_proxy_inferred": true,
+    "transparent_proxy_evidence": ["OpenAI DNS answers are in 198.18.0.0/15 fake-IP range", "Codex has established TCP connections to 198.18.0.x:443", "Clash Verge and verge-mihomo are running"],
+    "clash": {"version": "2.5.2", "processes_running": true, "config_paths": [], "safe_config": {}, "matching_rules": [], "safe_detail": "No active YAML path was exposed by lsof; transparent TUN/fake-IP behavior is inferred from DNS and connections."}
+  },
+  "dns": {
+    "servers": ["114.114.114.114"],
+    "resolutions": {
+      "auth.openai.com": {"system": ["198.18.0.13"], "cloudflare": ["198.18.0.13"], "google": ["198.18.0.13"]},
+      "chatgpt.com": {"system": ["198.18.0.107"], "cloudflare": ["198.18.0.107"], "google": ["198.18.0.107"]},
+      "api.openai.com": {"system": ["198.18.0.14"], "cloudflare": ["198.18.0.14"], "google": ["198.18.0.14"]},
+      "49.232.229.239": {"system": ["49.232.229.239"], "cloudflare": ["198.18.0.15"], "google": ["198.18.0.15"]}
+    },
+    "hosts_matches": [],
+    "safe_detail": "DNS queries to public resolvers were transparently intercepted and returned fake-IP answers; results do not represent independent public DNS responses."
+  },
+  "tls": {
+    "auth.openai.com": {"subject": "CN=auth.openai.com", "issuer": "Google Trust Services WE1", "san": ["auth.openai.com", "*.auth.openai.com"], "not_before": "2026-07-21T22:00:18Z", "not_after": "2026-10-19T23:00:15Z", "sha256_fingerprint": "1e2aa43b11a5e2776c8beaf2e8b9661a9bb3a0cc9469da3f66f4be29aeca0be3"},
+    "chatgpt.com": {"subject": "CN=chatgpt.com", "issuer": "Google Trust Services WE1", "san": ["chatgpt.com", "amb-staging.chatgpt.com", "*.amb-staging.chatgpt.com"], "not_before": "2026-07-23T20:05:49Z", "not_after": "2026-10-21T21:05:44Z", "sha256_fingerprint": "b006a341b879297f0bd51ca9bfc7916d19c1a86a3792b194ab1bb11072ebbd7c"},
+    "49.232.229.239": {"subject": "empty", "issuer": "Let's Encrypt YE1", "san": [], "not_before": "2026-08-12T23:13:20Z", "not_after": "2026-08-19T15:13:19Z", "sha256_fingerprint": "918d0b49182d77258287ebd96e3e27cde0a0f3e3b8a6568a72377871369aa21b", "warning": "Certificate identity metadata does not contain the IP address; the client accepted the configured endpoint during probe, but hostname verification semantics for an IP URL require review."}
+  },
+  "network_connections": [
+    {"pid": 3306, "process": "codex", "local_address": "198.18.0.1", "remote_address": "49.232.229.239", "remote_port": 443},
+    {"pid": 42195, "process": "codex", "local_address": "198.18.0.1", "remote_address": "49.232.229.239", "remote_port": 443},
+    {"pid": 1734, "process": "codex", "local_address": "198.18.0.1", "remote_address": "198.18.0.50", "remote_port": 443},
+    {"pid": 1683, "process": "Codex Service", "local_address": "198.18.0.1", "remote_address": "198.18.0.x", "remote_port": 443}
+  ],
+  "endpoint_probes": {
+    "base_url": "https://49.232.229.239/codex/v1",
+    "unauthenticated": {
+      "normal_path": {"http_status": 401, "server": "nginx/1.24.0 (Ubuntu)", "content_type": "application/json; charset=utf-8", "elapsed_ms": 548},
+      "no_proxy_environment": {"http_status": 401, "server": "nginx/1.24.0 (Ubuntu)", "content_type": "application/json; charset=utf-8", "elapsed_ms": 511, "safe_detail": "Environment proxy variables were absent in both cases; transparent TUN routing could not be bypassed by clearing proxy variables."}
+    },
+    "authenticated": {"executed": true, "http_status": 200, "server": "nginx/1.24.0 (Ubuntu)", "content_type": "application/json; charset=utf-8", "elapsed_ms": 502, "model_count": 32, "model_ids": ["kimi-k2", "gpt-5.4", "gpt-image-2", "grok-4.20-0309-reasoning", "gpt-5.5", "gpt-5.6-terra", "grok-build-0.1", "grok-3-mini-fast", "grok-4.6", "gpt-5.3-codex-spark", "grok-4.20-0309-non-reasoning", "grok-3-mini", "kimi-k2.7-code", "gpt-5.4-mini", "gpt-5.6-luna", "grok-4.5", "grok-4.3", "grok-composer-2.5-fast", "grok-imagine-image", "gpt-5.6-sol", "grok-imagine-image-quality", "kimi-k3-256k", "kimi-k2-thinking", "kimi-k2.6", "kimi-k2.7-code-highspeed", "codex-auto-review", "grok-4.20-multi-agent-0309", "kimi-k3", "kimi-k2.5", "gpt-image-1.5", "grok-imagine-video", "grok-imagine-video-1.5-preview"]},
+    "inference_endpoints_called": false
+  },
+  "invariants": {
+    "official_chatgpt_login_present": {"value": true, "status": "confirmed", "evidence_refs": ["authentication.login_status", "authentication.auth_mode"], "explanation": "Both CLI installations report ChatGPT login and auth_mode is chatgpt."},
+    "official_auth_cache_present": {"value": true, "status": "confirmed", "evidence_refs": ["authentication.auth_file"], "explanation": "Official access and refresh tokens are present in the file store."},
+    "third_party_provider_active": {"value": true, "status": "confirmed", "evidence_refs": ["codex_config.provider"], "explanation": "The active provider is custom and points to a third-party base URL."},
+    "provider_token_present": {"value": true, "status": "confirmed", "evidence_refs": ["codex_config.provider.experimental_bearer_token"], "explanation": "A static provider token is present."},
+    "provider_token_matches_ccswitch": {"value": true, "status": "confirmed", "evidence_refs": ["ccswitch.current_provider.token_matches_effective_config"], "explanation": "The two tokens compared equal in memory."},
+    "official_auth_preservation_enabled": {"value": true, "status": "confirmed", "evidence_refs": ["ccswitch.settings.preserveCodexOfficialAuthOnSwitch"], "explanation": "CC Switch preservation is enabled."},
+    "custom_model_catalog_forced": {"value": true, "status": "confirmed", "evidence_refs": ["codex_config.effective_fields.model_catalog_json"], "explanation": "A forced catalog path is configured."},
+    "local_model_catalog_readable": {"value": true, "status": "confirmed", "evidence_refs": ["model_catalogs.forced_catalog"], "explanation": "The configured catalog exists and parsed successfully."},
+    "ccswitch_listener_present": {"value": false, "status": "confirmed", "evidence_refs": ["ccswitch.proxy", "ccswitch.listener_present"], "explanation": "No listener owns port 15721."},
+    "ccswitch_codex_takeover_active": {"value": false, "status": "confirmed", "evidence_refs": ["ccswitch.proxy.live_takeover_active"], "explanation": "Database takeover flag is off."},
+    "codex_points_to_ccswitch_local_route": {"value": false, "status": "confirmed", "evidence_refs": ["codex_config.provider.base_url", "ccswitch.proxy"], "explanation": "Codex points directly to the remote upstream."},
+    "system_proxy_enabled": {"value": false, "status": "confirmed", "evidence_refs": ["proxy.system"], "explanation": "Explicit macOS HTTP/HTTPS/SOCKS/PAC proxies are disabled."},
+    "environment_proxy_enabled": {"value": false, "status": "confirmed", "evidence_refs": ["environment_variables"], "explanation": "Proxy environment variables are absent."},
+    "upstream_reachable_unauthenticated": {"value": true, "status": "confirmed", "evidence_refs": ["endpoint_probes.unauthenticated"], "explanation": "The upstream returned HTTP 401."},
+    "authenticated_models_probe_executed": {"value": true, "status": "confirmed", "evidence_refs": ["endpoint_probes.authenticated"], "explanation": "One authenticated GET /models completed."},
+    "runtime_model_matches_disk_default": {"value": true, "status": "confirmed", "evidence_refs": ["effective_runtime.model", "codex_config.effective_fields.model"], "explanation": "Both are gpt-5.6-sol."},
+    "runtime_provider_matches_disk_provider": {"value": true, "status": "confirmed", "evidence_refs": ["effective_runtime.model_provider", "codex_config.effective_fields.model_provider"], "explanation": "Both are codexmanager_server."},
+    "multiple_codex_versions_detected": {"value": true, "status": "confirmed", "evidence_refs": ["software.codex_installations"], "explanation": "Desktop is 0.147.0-alpha.1.2; npm is 0.147.0."},
+    "stale_endpoint_records_present": {"value": false, "status": "confirmed", "evidence_refs": ["ccswitch.provider_endpoints"], "explanation": "No provider_endpoints records exist."},
+    "codex_home_consistent_across_clients": {"value": true, "status": "inferred", "evidence_refs": ["environment_variables", "codex_config.codex_home"], "explanation": "All sampled clients omit CODEX_HOME and share the same HOME, resolving to ~/.codex."},
+    "ccswitch_data_dir_matches_open_files": {"value": true, "status": "confirmed", "evidence_refs": ["ccswitch.data_dir", "ccswitch.open_files"], "explanation": "CC Switch has the expected database open."},
+    "cli_auth_store_mode": {"value": null, "status": "inferred", "evidence_refs": ["authentication.auth_store_mode"], "explanation": "Categorical value is auto; actual active store is the file because the targeted Keychain entry is absent."},
+    "auth_file_present": {"value": true, "status": "confirmed", "evidence_refs": ["authentication.auth_file"], "explanation": "auth.json exists."},
+    "keychain_auth_entry_present": {"value": false, "status": "confirmed", "evidence_refs": ["authentication.keychain"], "explanation": "Targeted Codex Auth lookup returned no entry."},
+    "dual_auth_stores_present": {"value": false, "status": "confirmed", "evidence_refs": ["authentication.auth_file", "authentication.keychain"], "explanation": "Only the file store is present."},
+    "running_under_rosetta": {"value": false, "status": "confirmed", "evidence_refs": ["host.architecture"], "explanation": "This is an Intel Mac; x86_64 execution is native."},
+    "mixed_arch_codex_installations_present": {"value": false, "status": "confirmed", "evidence_refs": ["software.codex_installations"], "explanation": "Both Codex vendor binaries are x86_64."},
+    "managed_config_present": {"value": false, "status": "confirmed", "evidence_refs": ["config_sources"], "explanation": "Managed config is absent."},
+    "requirements_present": {"value": false, "status": "confirmed", "evidence_refs": ["config_sources"], "explanation": "Requirements file is absent."},
+    "macos_mdm_codex_preferences_present": {"value": false, "status": "confirmed", "evidence_refs": ["config_sources"], "explanation": "No managed Codex TOML keys were present."},
+    "gui_and_shell_proxy_consistent": {"value": true, "status": "inferred", "evidence_refs": ["proxy.system", "environment_variables"], "explanation": "Neither GUI nor shell uses explicit proxy settings; both are affected by the same transparent TUN path."},
+    "gui_and_shell_codex_home_consistent": {"value": true, "status": "inferred", "evidence_refs": ["environment_variables", "codex_config.codex_home"], "explanation": "No CODEX_HOME override was observed."},
+    "catalog_loaded_after_last_restart": {"value": true, "status": "inferred", "evidence_refs": ["model_catalogs.forced_catalog", "running_processes", "effective_runtime.model"], "explanation": "The main Desktop process started after the forced catalog modification and the runtime uses a catalog model; per-task reload timing remains non-atomic."},
+    "runtime_executable_matches_shell_codex": {"value": false, "status": "confirmed", "evidence_refs": ["effective_runtime.cli_version", "software.codex_installations"], "explanation": "The task uses the Desktop alpha CLI, while the shell resolves to the npm stable CLI."},
+    "ccswitch_codex_directory_matches_effective_codex_home": {"value": null, "status": "unknown", "evidence_refs": ["ccswitch.settings", "codex_config.codex_home"], "explanation": "No authoritative custom Codex Directory field exists in the inspected settings schema."},
+    "time_zone_sources_consistent": {"value": true, "status": "confirmed", "evidence_refs": ["time_sync"], "explanation": "Asia/Shanghai, +08:00, local time and UTC agree."}
+  },
+  "mismatches": [
+    {"id": "multiple_codex_versions", "severity": "warning", "summary": "Desktop-embedded and shell/npm Codex versions differ.", "evidence_refs": ["software.codex_installations"], "confidence": "confirmed"},
+    {"id": "runtime_executable_differs_from_shell", "severity": "warning", "summary": "This task uses Desktop CLI 0.147.0-alpha.1.2, but the login shell resolves to npm CLI 0.147.0.", "evidence_refs": ["effective_runtime.cli_version", "software.shell_default_codex"], "confidence": "confirmed"},
+    {"id": "runtime_service_tier_differs_from_disk", "severity": "warning", "summary": "Runtime service tier is default while disk default is priority.", "evidence_refs": ["effective_runtime.service_tier", "codex_config.effective_fields.service_tier"], "confidence": "confirmed"},
+    {"id": "runtime_reasoning_effort_differs_from_disk", "severity": "info", "summary": "Runtime effort is high while disk default is ultra.", "evidence_refs": ["effective_runtime.reasoning_effort", "codex_config.effective_fields.model_reasoning_effort"], "confidence": "confirmed"},
+    {"id": "local_proxy_preference_not_active", "severity": "info", "summary": "CC Switch local proxy preference is enabled, but proxy/takeover are off and no listener exists.", "evidence_refs": ["ccswitch.settings.enableLocalProxy", "ccswitch.proxy", "ccswitch.listener_present"], "confidence": "confirmed"},
+    {"id": "ccswitch_current_provider_markers_differ", "severity": "warning", "summary": "settings.json uses currentProviderCodex=default while the database current Provider is named codex.", "evidence_refs": ["ccswitch.settings.currentProviderCodex", "ccswitch.current_provider.name"], "confidence": "confirmed"},
+    {"id": "catalog_model_count_layers_differ", "severity": "info", "summary": "Remote cache has 9 models, forced catalog 30, and live upstream 32; the menu is constrained by the forced catalog and visibility flags.", "evidence_refs": ["model_catalogs"], "confidence": "confirmed"},
+    {"id": "forced_catalog_stale_vs_upstream", "severity": "warning", "summary": "Live upstream exposes grok-4.6 and kimi-k3-256k, which are absent from the forced catalog.", "evidence_refs": ["model_catalogs.upstream_models", "model_catalogs.forced_catalog"], "confidence": "confirmed"},
+    {"id": "transparent_proxy_active_despite_explicit_proxy_off", "severity": "warning", "summary": "Clash/Mihomo transparent fake-IP/TUN routing is active although macOS explicit proxy settings and proxy environment variables are off.", "evidence_refs": ["proxy", "dns", "network_connections"], "confidence": "inferred"},
+    {"id": "ccswitch_database_permissions", "severity": "high", "summary": "~/.cc-switch/cc-switch.db is mode 0644 and may be readable by other local users.", "evidence_refs": ["ccswitch.database_file.mode"], "confidence": "confirmed"},
+    {"id": "upstream_ip_certificate_identity", "severity": "warning", "summary": "The upstream URL uses an IP address while observed certificate identity metadata does not contain that IP.", "evidence_refs": ["codex_config.provider.base_url", "tls.49.232.229.239"], "confidence": "confirmed"}
+  ],
+  "collection_errors": [
+    {"stage": "time_sync", "code": "network_time_status_permission_denied", "error_type": "PermissionDenied", "exit_code": 0, "fatal": false, "safe_detail": "systemsetup printed an administrator-access requirement despite exit code 0."},
+    {"stage": "codex_doctor", "code": "doctor_timeout", "error_type": "TimeoutExpired", "exit_code": null, "fatal": false, "safe_detail": "codex doctor --json did not complete within the bounded read-only timeout; equivalent evidence was collected from files, processes and runtime metadata."},
+    {"stage": "clash_config", "code": "active_config_path_unresolved", "error_type": "NotFound", "exit_code": null, "fatal": false, "safe_detail": "No active YAML path was returned by lsof; transparent routing was established from process, DNS and connection evidence."},
+    {"stage": "ccswitch_directory", "code": "custom_codex_directory_field_unresolved", "error_type": "UnknownSchemaField", "exit_code": null, "fatal": false, "safe_detail": "The inspected settings schema contained no authoritative custom Codex Directory field."}
+  ]
+}

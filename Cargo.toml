@@ -8,14 +8,16 @@ description = "Fail-closed installer assistant for five fixed AI desktop clients
 [dependencies]
 base64 = "0.22"
 crossbeam-channel = "0.5"
+ed25519-dalek = "2.2"
 eframe = { version = "0.35.0", default-features = false, features = ["accesskit", "default_fonts", "glow"] }
 egui_extras = { version = "0.35.0", features = ["image"] }
 hex = "0.4"
 flate2 = "1.1"
 minisign-verify = "0.2.5"
+memmap2 = "0.9"
 plist = "1.7"
 regex = "1.11"
-reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "native-tls-no-alpn"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "native-tls-no-alpn", "system-proxy"] }
 roxmltree = "0.21"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
@@ -28,7 +30,15 @@ url = "2.5"
 zip = { version = "4.3", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Registry",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
@@ -37,7 +47,7 @@ libc = "0.2"
 httpmock = "0.8"
 
 [build-dependencies]
-winres = "0.1.12"
+winresource = "0.1.31"
 
 [profile.release]
 codegen-units = 1

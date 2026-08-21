@@ -7,8 +7,9 @@ fn main() -> eframe::Result<()> {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_app_id(APP_ID)
             .with_icon(application_icon())
-            .with_inner_size([800.0, 610.0])
-            .with_min_inner_size([720.0, 560.0]),
+            .with_inner_size([800.0, 620.0])
+            .with_min_inner_size([740.0, 580.0])
+            .with_max_inner_size([900.0, 700.0]),
         ..Default::default()
     };
 

@@ -2,7 +2,7 @@
 task_contract_version: 3
 card_id: "AI-CLIENT-INSTALLER-CHATGPT-DIRECT"
 title: "让 ChatGPT Windows 与其他产品一样一键直连安装或更新"
-status: "ready"
+status: "superseded"
 work_kind: "mixed"
 execution_target: "agent-executable"
 complexity: "complex"
@@ -13,6 +13,8 @@ external_review_policy: "optional"
 repo_root: "E:\\Obsidian\\workspaces\\ai-client-installer"
 blocked_by: []
 ---
+
+> 2026-08-12 superseded：本卡记录的是已经废止的直接 MSIX 设计。当前实现改为“验证并启动绑定固定 Product ID 的微软轻量安装器；仅在明确的微软网络/分发服务失败时使用官方完整 MSIX 与离线许可证兜底”，不再依赖 WinGet/App Installer 自愈。见 `evidence/chatgpt-windows-store-recovery-2026-08-11.md` 和当前实现文档。
 
 # 1. 任务身份与就绪状态
 

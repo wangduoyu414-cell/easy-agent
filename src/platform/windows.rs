@@ -1,61 +1,164 @@
+use std::collections::HashMap;
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::os::windows::ffi::OsStringExt;
+use std::mem::size_of;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use regex::Regex;
 use serde::Deserialize;
+use windows_sys::Win32::Foundation::{
+    CloseHandle, ERROR_CANCELLED, GetLastError, S_OK, WAIT_OBJECT_0, WAIT_TIMEOUT,
+};
+use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+use windows_sys::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject};
+use windows_sys::Win32::UI::Shell::{
+    FOLDERID_Downloads, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, SHGetKnownFolderPath,
+    ShellExecuteExW,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 use zip::ZipArchive;
 
 use crate::core::{
-    Architecture, Detection, PackageKind, ProductId, TrustEntry, WindowsPeMachine,
-    verify_staged_identity,
+    Architecture, Detection, OperatingSystem, PackageKind, ProductId, TrustEntry, TrustRegistry,
+    WindowsPeMachine, verify_staged_identity,
 };
 
 use super::{ArtifactVerification, InstallerExecution, PlannedCommand, VerifiedInstallRequest};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_INSTALLER_ERROR_CHARS: usize = 4096;
+const MSIX_ERROR_MARKER: &str = "EASY_AGENT_MSIX_ERROR";
+const CLAUDE_PROVISION_TIMEOUT: Duration = Duration::from_secs(45 * 60);
+const DETECTION_TIMEOUT: Duration = Duration::from_secs(20);
+
+pub fn downloads_directory() -> Result<PathBuf, String> {
+    let mut raw_path = std::ptr::null_mut();
+    // SAFETY: SHGetKnownFolderPath initializes raw_path with a CoTaskMem-allocated,
+    // null-terminated UTF-16 path on success. The pointer is released below on every path.
+    let status = unsafe {
+        SHGetKnownFolderPath(&FOLDERID_Downloads, 0, std::ptr::null_mut(), &mut raw_path)
+    };
+    if status != S_OK || raw_path.is_null() {
+        // SAFETY: CoTaskMemFree accepts a null pointer.
+        unsafe { CoTaskMemFree(raw_path.cast()) };
+        return Err(format!(
+            "cannot resolve the Windows Downloads known folder (HRESULT 0x{:08X})",
+            status as u32
+        ));
+    }
+
+    let result = (|| {
+        let mut length = 0_usize;
+        // Windows paths are bounded well below this defensive limit.
+        while length < 32_768 {
+            // SAFETY: raw_path is a valid null-terminated string on successful return.
+            if unsafe { *raw_path.add(length) } == 0 {
+                break;
+            }
+            length += 1;
+        }
+        if length == 32_768 {
+            return Err("Windows Downloads path is not null-terminated".into());
+        }
+        // SAFETY: the preceding loop found the terminator within the allocated string.
+        let path = unsafe { std::slice::from_raw_parts(raw_path, length) };
+        let path = PathBuf::from(OsString::from_wide(path));
+        if path.as_os_str().is_empty() {
+            return Err("Windows Downloads known folder is empty".into());
+        }
+        Ok(path)
+    })();
+
+    // SAFETY: raw_path was allocated by SHGetKnownFolderPath.
+    unsafe { CoTaskMemFree(raw_path.cast()) };
+    result
+}
 
 const DETECTION_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
-Import-Module Appx -ErrorAction Stop
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$OutputEncoding = [Console]::OutputEncoding
 $product = $env:EASY_AGENT_PRODUCT
-$tokens = switch ($product) {
-  'workbuddy' { @('WorkBuddy') }
-  'hermes' { @('Hermes', 'Hermes Agent') }
-  'cc_switch' { @('CC Switch', 'CCSwitch') }
-  'claude' { @('Claude') }
-  'chatgpt' { @('ChatGPT', 'OpenAI.Codex') }
-  default { @() }
-}
+$scope = [string]$env:EASY_AGENT_DETECTION_SCOPE
+$allProducts = [string]::IsNullOrWhiteSpace($product)
+$includeAppx = $scope -ne 'registry' -and ($allProducts -or $product -eq 'claude' -or $product -eq 'chatgpt')
+$includeRegistry = $scope -ne 'appx' -and ($allProducts -or $product -eq 'workbuddy' -or $product -eq 'hermes' -or $product -eq 'cc_switch')
 
-$appx = $null
-if ($product -eq 'claude') {
-  $pkg = Get-AppxPackage -Name Claude -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
-  if ($pkg) { $appx = [pscustomobject]@{ installed=$true; version=$pkg.Version.ToString(); managed=[bool]$pkg.NonRemovable; management_known=$true; package_identity=[string]$pkg.Name; package_family=[string]$pkg.PackageFamilyName; publisher=[string]$pkg.Publisher; architecture=[string]$pkg.Architecture; evidence=('AppX:' + $pkg.PackageFamilyName) } }
-}
-if ($product -eq 'chatgpt') {
-  $pkg = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.PackageFamilyName -eq 'OpenAI.Codex_2p2nqsd0c76g0' } | Sort-Object Version -Descending | Select-Object -First 1
-  if ($pkg) { $appx = [pscustomobject]@{ installed=$true; version=$pkg.Version.ToString(); managed=[bool]$pkg.NonRemovable; management_known=$true; package_identity=[string]$pkg.Name; package_family=[string]$pkg.PackageFamilyName; publisher=[string]$pkg.Publisher; architecture=[string]$pkg.Architecture; evidence=('AppX:' + $pkg.PackageFamilyName) } }
+$appxPackages = @()
+$appxError = $null
+if ($includeAppx) {
+  try {
+    $appxModule = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\Modules\Appx\Appx.psd1'
+    Import-Module -Name $appxModule -ErrorAction Stop
+    $targets = @(
+      [pscustomobject]@{ product='claude'; identity=[string]$env:EASY_AGENT_CLAUDE_PACKAGE_IDENTITY; family=[string]$env:EASY_AGENT_CLAUDE_PACKAGE_FAMILY },
+      [pscustomobject]@{ product='chatgpt'; identity=[string]$env:EASY_AGENT_CHATGPT_PACKAGE_IDENTITY; family=[string]$env:EASY_AGENT_CHATGPT_PACKAGE_FAMILY }
+    )
+    foreach ($target in $targets) {
+      if (-not $allProducts -and $target.product -ne $product) { continue }
+      if ([string]::IsNullOrWhiteSpace($target.identity) -or [string]::IsNullOrWhiteSpace($target.family)) {
+        throw ('缺少 ' + $target.product + ' AppX 身份配置')
+      }
+      $pkg = Get-AppxPackage -Name $target.identity -PackageTypeFilter Main -ErrorAction Stop |
+        Where-Object { $_.PackageFamilyName -eq $target.family } |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+      if ($pkg) {
+        $appxPackages += [pscustomobject]@{
+          product = $target.product
+          installed = $true
+          version = $pkg.Version.ToString()
+          managed = [bool]$pkg.NonRemovable
+          management_known = $true
+          package_identity = [string]$pkg.Name
+          package_family = [string]$pkg.PackageFamilyName
+          publisher = [string]$pkg.Publisher
+          architecture = [string]$pkg.Architecture
+          evidence = ('AppX:' + $pkg.PackageFamilyName)
+        }
+      }
+    }
+  } catch {
+    $appxError = [string]$_.Exception.Message
+  }
 }
 
 $registryEntries = @()
-if (-not $appx) {
-  $roots = @(
-    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-  )
-  $registryEntries = @(
-    Get-ItemProperty -Path $roots -ErrorAction SilentlyContinue |
+$registryError = $null
+if ($includeRegistry) {
+  try {
+    $tokens = if ($allProducts) {
+      @('WorkBuddy', 'Hermes', 'Hermes Agent', 'CC Switch', 'CCSwitch')
+    } else {
+      switch ($product) {
+        'workbuddy' { @('WorkBuddy') }
+        'hermes' { @('Hermes', 'Hermes Agent') }
+        'cc_switch' { @('CC Switch', 'CCSwitch') }
+        default { @() }
+      }
+    }
+    $roots = @(
+      'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+      'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+      'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $items = foreach ($root in $roots) {
+      if (Test-Path -LiteralPath $root) {
+        Get-ItemProperty -Path ($root + '\*') -ErrorAction Stop
+      }
+    }
+    $registryEntries = @(
+      $items |
       Where-Object {
         $name = [string]$_.DisplayName
         $matched = $false
@@ -78,12 +181,17 @@ if (-not $appx) {
           current_user = ([string]$_.PSPath).StartsWith('Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\', [System.StringComparison]::OrdinalIgnoreCase)
         }
       }
-  )
+    )
+  } catch {
+    $registryError = [string]$_.Exception.Message
+  }
 }
 
 [pscustomobject]@{
-  appx = $appx
-  registry_entries = $registryEntries
+  appx_packages = @($appxPackages)
+  appx_error = $appxError
+  registry_entries = @($registryEntries)
+  registry_error = $registryError
 } | ConvertTo-Json -Compress -Depth 5
 "#;
 
@@ -129,12 +237,63 @@ if ($kind -eq 'msi') {
 
 const INSTALL_MSIX_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 Import-Module Appx -ErrorAction Stop
-Add-AppxPackage -Path $env:EASY_AGENT_ARTIFACT -ForceTargetApplicationShutdown -ErrorAction Stop
+try {
+  Add-AppxPackage -Path $env:EASY_AGENT_ARTIFACT -ForceTargetApplicationShutdown -ErrorAction Stop
+} catch {
+  $message = [string]$_.Exception.Message
+  if ($_.ErrorDetails -and -not [string]::IsNullOrWhiteSpace([string]$_.ErrorDetails.Message)) {
+    $message = $message + ' ' + [string]$_.ErrorDetails.Message
+  }
+  $fullyQualifiedErrorId = [string]$_.FullyQualifiedErrorId
+  $hresult = 'UNKNOWN'
+  if ($_.Exception) {
+    try {
+      $unsignedHresult = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int32]$_.Exception.HResult), 0)
+      $hresult = ('0x{0:X8}' -f $unsignedHresult)
+    } catch {}
+  }
+  $messageBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($message))
+  $fqidBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($fullyQualifiedErrorId))
+  [Console]::Error.WriteLine("EASY_AGENT_MSIX_ERROR HRESULT=$hresult MESSAGE_B64=$messageBase64 FQID_B64=$fqidBase64")
+  exit 1
+}
+"#;
+
+const CLAUDE_PROVISION_SCRIPT_TEMPLATE: &str = r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Import-Module Dism -ErrorAction Stop
+$packagePath = '__PACKAGE_PATH__'
+$receiptPath = '__RECEIPT_PATH__'
+try {
+  Add-AppxProvisionedPackage -Online -PackagePath $packagePath -SkipLicense -Regions 'all' -ErrorAction Stop | Out-Null
+  [IO.File]::WriteAllText($receiptPath, 'OK', [Text.Encoding]::UTF8)
+} catch {
+  $message = [string]$_.Exception.Message
+  if ($_.ErrorDetails -and -not [string]::IsNullOrWhiteSpace([string]$_.ErrorDetails.Message)) {
+    $message = $message + ' ' + [string]$_.ErrorDetails.Message
+  }
+  $fullyQualifiedErrorId = [string]$_.FullyQualifiedErrorId
+  $hresult = 'UNKNOWN'
+  if ($_.Exception) {
+    try {
+      $unsignedHresult = [BitConverter]::ToUInt32([BitConverter]::GetBytes([int32]$_.Exception.HResult), 0)
+      $hresult = ('0x{0:X8}' -f $unsignedHresult)
+    } catch {}
+  }
+  $messageBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($message))
+  $fqidBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($fullyQualifiedErrorId))
+  $marker = "EASY_AGENT_MSIX_ERROR HRESULT=$hresult MESSAGE_B64=$messageBase64 FQID_B64=$fqidBase64"
+  [IO.File]::WriteAllText($receiptPath, $marker, [Text.Encoding]::UTF8)
+  exit 1
+}
 "#;
 
 #[derive(Debug, Deserialize)]
 struct AppxDetectionOutput {
+    product: String,
     installed: bool,
     version: Option<String>,
     managed: bool,
@@ -146,7 +305,7 @@ struct AppxDetectionOutput {
     evidence: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct RegistryEntryOutput {
     display_name: String,
     version: Option<String>,
@@ -159,9 +318,12 @@ struct RegistryEntryOutput {
 
 #[derive(Debug, Deserialize)]
 struct DetectionOutput {
-    appx: Option<AppxDetectionOutput>,
+    #[serde(default)]
+    appx_packages: Vec<AppxDetectionOutput>,
+    appx_error: Option<String>,
     #[serde(default)]
     registry_entries: Vec<RegistryEntryOutput>,
+    registry_error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -242,6 +404,61 @@ pub fn detect_product(
     product: ProductId,
     trust: Option<&TrustEntry>,
 ) -> Result<Detection, io::Error> {
+    let claude = (product == ProductId::Claude).then_some(trust).flatten();
+    let chatgpt = (product == ProductId::ChatGpt).then_some(trust).flatten();
+    let parsed = run_detection_script(Some(product), "single", claude, chatgpt)?;
+    Ok(detection_from_output(product, &parsed, trust))
+}
+
+pub fn detect_products(
+    registry: Option<&TrustRegistry>,
+    architecture: Architecture,
+    products: &[ProductId],
+) -> Result<HashMap<ProductId, Detection>, io::Error> {
+    if products.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let trust_for = |product| {
+        registry.and_then(|registry| registry.find(product, OperatingSystem::Windows, architecture))
+    };
+    let contains_appx = products
+        .iter()
+        .any(|product| matches!(product, ProductId::Claude | ProductId::ChatGpt));
+    let contains_registry = products.iter().any(|product| {
+        matches!(
+            product,
+            ProductId::WorkBuddy | ProductId::Hermes | ProductId::CcSwitch
+        )
+    });
+    let scope = match (contains_appx, contains_registry) {
+        (true, false) => "appx",
+        (false, true) => "registry",
+        _ => "all",
+    };
+    let parsed = run_detection_script(
+        None,
+        scope,
+        trust_for(ProductId::Claude),
+        trust_for(ProductId::ChatGpt),
+    )?;
+    Ok(products
+        .iter()
+        .copied()
+        .map(|product| {
+            (
+                product,
+                detection_from_output(product, &parsed, trust_for(product)),
+            )
+        })
+        .collect())
+}
+
+fn run_detection_script(
+    product: Option<ProductId>,
+    scope: &str,
+    claude: Option<&TrustEntry>,
+    chatgpt: Option<&TrustEntry>,
+) -> Result<DetectionOutput, io::Error> {
     let bytes: Vec<u8> = DETECTION_SCRIPT
         .encode_utf16()
         .flat_map(u16::to_le_bytes)
@@ -263,42 +480,132 @@ pub fn detect_product(
             "-EncodedCommand",
             &encoded,
         ])
-        .env("EASY_AGENT_PRODUCT", product.key())
-        .output()?;
+        .env(
+            "EASY_AGENT_PRODUCT",
+            product.map(ProductId::key).unwrap_or_default(),
+        )
+        .env("EASY_AGENT_DETECTION_SCOPE", scope)
+        .env(
+            "EASY_AGENT_CLAUDE_PACKAGE_IDENTITY",
+            claude
+                .and_then(|entry| entry.package_identity.as_deref())
+                .unwrap_or_default(),
+        )
+        .env(
+            "EASY_AGENT_CLAUDE_PACKAGE_FAMILY",
+            claude
+                .and_then(|entry| entry.package_family.as_deref())
+                .unwrap_or_default(),
+        )
+        .env(
+            "EASY_AGENT_CHATGPT_PACKAGE_IDENTITY",
+            chatgpt
+                .and_then(|entry| entry.package_identity.as_deref())
+                .unwrap_or_default(),
+        )
+        .env(
+            "EASY_AGENT_CHATGPT_PACKAGE_FAMILY",
+            chatgpt
+                .and_then(|entry| entry.package_family.as_deref())
+                .unwrap_or_default(),
+        )
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let output = wait_for_detection_output(output, DETECTION_TIMEOUT)?;
     if !output.status.success() {
-        return Err(io::Error::other(
-            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-        ));
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        return Err(io::Error::other(if detail.is_empty() {
+            format!("Windows 本机检测进程退出状态异常：{}", output.status)
+        } else {
+            detail
+        }));
     }
-    let parsed: DetectionOutput = serde_json::from_slice(&output.stdout)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    if let Some(appx) = parsed.appx {
-        return Ok(Detection {
-            installed: appx.installed,
-            version: appx.version,
-            managed: appx.managed,
-            management_known: appx.management_known,
-            package_identity: appx.package_identity,
-            package_family: appx.package_family,
-            publisher: appx.publisher,
-            architecture: appx
-                .architecture
-                .as_deref()
-                .and_then(parse_appx_architecture),
-            evidence: appx.evidence,
-        });
+    let stdout = output
+        .stdout
+        .strip_prefix(&[0xEF, 0xBB, 0xBF])
+        .unwrap_or(&output.stdout);
+    serde_json::from_slice(stdout)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
+fn wait_for_detection_output(
+    mut child: std::process::Child,
+    timeout: Duration,
+) -> Result<std::process::Output, io::Error> {
+    let started = Instant::now();
+    loop {
+        if child.try_wait()?.is_some() {
+            return child.wait_with_output();
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("Windows 本机检测超过 {} 秒", timeout.as_secs()),
+            ));
+        }
+        thread::sleep(Duration::from_millis(50));
     }
-    if let Some(detection) = select_registry_detection(product, parsed.registry_entries, trust) {
-        return Ok(detection);
+}
+
+fn detection_from_output(
+    product: ProductId,
+    parsed: &DetectionOutput,
+    trust: Option<&TrustEntry>,
+) -> Detection {
+    if matches!(product, ProductId::Claude | ProductId::ChatGpt) {
+        if let Some(error) = parsed
+            .appx_error
+            .as_deref()
+            .filter(|error| !error.is_empty())
+        {
+            return Detection::failed(format!("Windows AppX 查询失败：{error}"));
+        }
+        if let Some(appx) = parsed
+            .appx_packages
+            .iter()
+            .find(|appx| appx.product == product.key())
+        {
+            return Detection {
+                installed: appx.installed,
+                version: appx.version.clone(),
+                managed: appx.managed,
+                management_known: appx.management_known,
+                package_identity: appx.package_identity.clone(),
+                package_family: appx.package_family.clone(),
+                publisher: appx.publisher.clone(),
+                architecture: appx
+                    .architecture
+                    .as_deref()
+                    .and_then(parse_appx_architecture),
+                evidence: appx.evidence.clone(),
+            };
+        }
+        return Detection::absent("No exact AppX package family found");
     }
+
     if product == ProductId::Hermes
         && let (Some(local_app_data), Some(trust)) = (env::var_os("LOCALAPPDATA"), trust)
         && let Some(detection) =
             detect_hermes_fixed_install_at(&PathBuf::from(local_app_data), trust)
     {
-        return Ok(detection);
+        return detection;
     }
-    Ok(Detection::absent("No exact registered identity found"))
+    if let Some(error) = parsed
+        .registry_error
+        .as_deref()
+        .filter(|error| !error.is_empty())
+    {
+        return Detection::failed(format!("Windows 注册表查询失败：{error}"));
+    }
+    if let Some(detection) =
+        select_registry_detection(product, parsed.registry_entries.clone(), trust)
+    {
+        return detection;
+    }
+    Detection::absent("No exact registered identity found")
 }
 
 fn detect_hermes_fixed_install_at(local_app_data: &Path, trust: &TrustEntry) -> Option<Detection> {
@@ -717,16 +1024,37 @@ fn expected_executable_machine(
 }
 
 pub fn plan_install_command(path: &Path, kind: PackageKind) -> Result<PlannedCommand, String> {
+    plan_install_command_with_payload(path, kind, None)
+}
+
+fn plan_install_command_with_payload(
+    path: &Path,
+    kind: PackageKind,
+    bootstrap_payload: Option<&Path>,
+) -> Result<PlannedCommand, String> {
     let literal_path = path
         .to_str()
         .ok_or_else(|| "installer path is not valid Unicode".to_owned())?
         .to_owned();
     match kind {
-        PackageKind::Exe => Ok(PlannedCommand {
-            program: literal_path,
-            arguments: Vec::new(),
-            environment: Vec::new(),
-        }),
+        PackageKind::Exe => {
+            let arguments = if let Some(payload) = bootstrap_payload {
+                vec![
+                    "--msix-path".into(),
+                    payload
+                        .to_str()
+                        .ok_or_else(|| "bootstrap payload path is not valid Unicode".to_owned())?
+                        .to_owned(),
+                ]
+            } else {
+                Vec::new()
+            };
+            Ok(PlannedCommand {
+                program: literal_path,
+                arguments,
+                environment: Vec::new(),
+            })
+        }
         PackageKind::Msi => Ok(PlannedCommand {
             program: trusted_msiexec_program()?,
             arguments: vec!["/i".into(), literal_path, "/qn".into(), "/norestart".into()],
@@ -749,6 +1077,143 @@ pub fn plan_install_command(path: &Path, kind: PackageKind) -> Result<PlannedCom
         }),
         _ => Err(format!("unsupported Windows package type: {kind:?}")),
     }
+}
+
+fn execute_claude_provisioned_msix(
+    private_root: &Path,
+    package_path: &Path,
+) -> Result<InstallerExecution, String> {
+    let receipt_path = private_root.join("claude-provision-result.txt");
+    let package = powershell_literal_path(package_path, "Claude MSIX")?;
+    let receipt = powershell_literal_path(&receipt_path, "Claude deployment receipt")?;
+    let script = CLAUDE_PROVISION_SCRIPT_TEMPLATE
+        .replace("__PACKAGE_PATH__", &package)
+        .replace("__RECEIPT_PATH__", &receipt);
+    let powershell = trusted_powershell_program()?;
+    let arguments = vec![
+        "-NoLogo".into(),
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-ExecutionPolicy".into(),
+        "Bypass".into(),
+        "-EncodedCommand".into(),
+        encode_powershell(&script),
+    ];
+    let outcome =
+        shell_execute_elevated_wait(Path::new(&powershell), &arguments, CLAUDE_PROVISION_TIMEOUT)?;
+    let receipt = fs::read_to_string(&receipt_path).ok();
+    match outcome {
+        ElevatedProcessOutcome::Exited(exit_code) => {
+            let error_summary = if exit_code == 0 {
+                receipt
+                    .as_deref()
+                    .filter(|value| value.trim() != "OK")
+                    .map(|value| value.trim().to_owned())
+            } else {
+                receipt
+                    .as_deref()
+                    .and_then(|value| extract_msix_error_marker("", value))
+                    .or_else(|| Some("Claude 机器级 MSIX 部署未完成".into()))
+            };
+            Ok(InstallerExecution {
+                exit_code: exit_code as i32,
+                error_summary,
+            })
+        }
+        ElevatedProcessOutcome::Cancelled => Ok(InstallerExecution {
+            exit_code: ERROR_CANCELLED as i32,
+            error_summary: Some("已取消 Claude 管理员授权，未部署应用包".into()),
+        }),
+        ElevatedProcessOutcome::TimedOut => Ok(InstallerExecution {
+            exit_code: -1,
+            error_summary: Some(
+                "Claude 系统部署等待超时；Windows 可能仍在后台处理，请稍后刷新状态".into(),
+            ),
+        }),
+    }
+}
+
+fn powershell_literal_path(path: &Path, label: &str) -> Result<String, String> {
+    let value = path
+        .to_str()
+        .ok_or_else(|| format!("{label} path is not valid Unicode"))?;
+    if value
+        .chars()
+        .any(|character| matches!(character, '\0' | '\r' | '\n'))
+    {
+        return Err(format!("{label} path contains control characters"));
+    }
+    Ok(value.replace('\'', "''"))
+}
+
+enum ElevatedProcessOutcome {
+    Exited(u32),
+    Cancelled,
+    TimedOut,
+}
+
+fn shell_execute_elevated_wait(
+    program: &Path,
+    arguments: &[String],
+    timeout: Duration,
+) -> Result<ElevatedProcessOutcome, String> {
+    let verb = wide("runas");
+    let file = wide_os(program.as_os_str());
+    let params = wide(&arguments.join(" "));
+    let mut info = SHELLEXECUTEINFOW {
+        cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOCLOSEPROCESS,
+        lpVerb: verb.as_ptr(),
+        lpFile: file.as_ptr(),
+        lpParameters: params.as_ptr(),
+        nShow: SW_SHOWNORMAL,
+        ..Default::default()
+    };
+    // SAFETY: UTF-16 buffers live across the call and the returned process handle is closed below.
+    if unsafe { ShellExecuteExW(&mut info) } == 0 {
+        let error = unsafe { GetLastError() };
+        return if error == ERROR_CANCELLED {
+            Ok(ElevatedProcessOutcome::Cancelled)
+        } else {
+            Err(format!(
+                "cannot start elevated Claude deployment, Windows error {error}"
+            ))
+        };
+    }
+    if info.hProcess.is_null() {
+        return Err("elevated Claude deployment returned no process handle".into());
+    }
+    let milliseconds = timeout.as_millis().min(u32::MAX as u128) as u32;
+    // SAFETY: hProcess is a valid handle returned by ShellExecuteExW.
+    let wait = unsafe { WaitForSingleObject(info.hProcess, milliseconds) };
+    if wait == WAIT_TIMEOUT {
+        // SAFETY: hProcess is owned by this function.
+        unsafe { CloseHandle(info.hProcess) };
+        return Ok(ElevatedProcessOutcome::TimedOut);
+    }
+    if wait != WAIT_OBJECT_0 {
+        let error = unsafe { GetLastError() };
+        unsafe { CloseHandle(info.hProcess) };
+        return Err(format!(
+            "cannot wait for elevated Claude deployment, Windows error {error}"
+        ));
+    }
+    let mut exit_code = 0_u32;
+    // SAFETY: hProcess is signaled and valid until CloseHandle below.
+    let success = unsafe { GetExitCodeProcess(info.hProcess, &mut exit_code) };
+    unsafe { CloseHandle(info.hProcess) };
+    if success == 0 {
+        return Err("cannot read elevated Claude deployment exit code".into());
+    }
+    Ok(ElevatedProcessOutcome::Exited(exit_code))
+}
+
+fn wide(value: &str) -> Vec<u16> {
+    OsStr::new(value).encode_wide().chain(Some(0)).collect()
+}
+
+fn wide_os(value: &OsStr) -> Vec<u16> {
+    value.encode_wide().chain(Some(0)).collect()
 }
 
 pub fn execute_verified_installer(
@@ -797,7 +1262,52 @@ pub fn execute_verified_installer(
         return Err("artifact digest changed at execution handoff".into());
     }
 
-    let plan = plan_install_command(request.path, request.kind)?;
+    if request.trust.product == ProductId::Claude && request.kind == PackageKind::Msix {
+        if request.bootstrap_payload.is_some() {
+            return Err("Claude direct MSIX must not contain a bootstrap payload".into());
+        }
+        return execute_claude_provisioned_msix(request.private_root, request.path);
+    }
+
+    let payload_path = if let Some(payload) = request.bootstrap_payload {
+        if request.trust.product != ProductId::Claude
+            || request.kind != PackageKind::Exe
+            || payload.kind != PackageKind::Msix
+            || payload.expected_architecture != request.expected_architecture
+            || payload.detached_signature.is_some()
+        {
+            return Err("unsupported bootstrap payload contract".into());
+        }
+        verify_staged_identity(
+            payload.private_root,
+            payload.path,
+            payload.verified_identity,
+            payload.expected_sha256,
+        )
+        .map_err(|error| format!("verified bootstrap payload changed before execution: {error}"))?;
+        verify_artifact(
+            payload.path,
+            payload.kind,
+            request.trust,
+            payload.expected_architecture,
+            false,
+        )?;
+        let payload_rebound = verify_staged_identity(
+            payload.private_root,
+            payload.path,
+            payload.verified_identity,
+            payload.expected_sha256,
+        )
+        .map_err(|error| format!("bootstrap payload changed at execution handoff: {error}"))?;
+        if payload_rebound.sha256 != payload.verified_identity.sha256 {
+            return Err("bootstrap payload digest changed at execution handoff".into());
+        }
+        Some(payload.path)
+    } else {
+        None
+    };
+
+    let plan = plan_install_command_with_payload(request.path, request.kind, payload_path)?;
     let mut command = Command::new(&plan.program);
     hide_console_window(&mut command);
     command.args(&plan.arguments);
@@ -840,9 +1350,18 @@ fn known_installer_error(kind: PackageKind, exit_code: i32) -> Option<String> {
     }
 }
 
-fn summarize_installer_error(stdout: &[u8], stderr: &[u8]) -> Option<String> {
+pub(crate) fn summarize_installer_error(stdout: &[u8], stderr: &[u8]) -> Option<String> {
     let stderr = String::from_utf8_lossy(stderr);
     let stdout = String::from_utf8_lossy(stdout);
+    if let Some(summary) = extract_msix_error_marker(&stdout, &stderr) {
+        return Some(summary);
+    }
+    if stderr.contains("#< CLIXML") || stdout.contains("#< CLIXML") {
+        return Some(
+            "Windows 应用包部署失败，但 PowerShell 只返回了不可读的进度数据；新版 easy agent 已关闭该噪声，请重试以获取真实错误码"
+                .into(),
+        );
+    }
     let raw = if stderr.trim().is_empty() {
         stdout.trim().to_owned()
     } else if stdout.trim().is_empty() {
@@ -857,6 +1376,37 @@ fn summarize_installer_error(stdout: &[u8], stderr: &[u8]) -> Option<String> {
     let mut summary: String = normalized.chars().take(MAX_INSTALLER_ERROR_CHARS).collect();
     if normalized.chars().count() > MAX_INSTALLER_ERROR_CHARS {
         summary.push('…');
+    }
+    Some(summary)
+}
+
+fn extract_msix_error_marker(stdout: &str, stderr: &str) -> Option<String> {
+    static MARKER_PATTERN: OnceLock<Regex> = OnceLock::new();
+    let pattern = MARKER_PATTERN.get_or_init(|| {
+        Regex::new(
+            r"EASY_AGENT_MSIX_ERROR\s+HRESULT=(0x[0-9A-Fa-f]{8}|UNKNOWN)\s+MESSAGE_B64=([A-Za-z0-9+/=]*)\s+FQID_B64=([A-Za-z0-9+/=]*)",
+        )
+        .expect("static MSIX error marker regex")
+    });
+    let combined = format!("{stderr}\n{stdout}");
+    if !combined.contains(MSIX_ERROR_MARKER) {
+        return None;
+    }
+    let captures = pattern.captures(&combined)?;
+    let hresult = captures.get(1)?.as_str();
+    let decode = |value: &str| {
+        base64::engine::general_purpose::STANDARD
+            .decode(value)
+            .ok()
+            .map(|bytes| String::from_utf8_lossy(&bytes).trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let message =
+        decode(captures.get(2)?.as_str()).unwrap_or_else(|| "Windows 未返回详细错误信息".into());
+    let fqid = decode(captures.get(3)?.as_str());
+    let mut summary = format!("MSIX 部署失败（HRESULT {hresult}）：{message}");
+    if let Some(fqid) = fqid {
+        summary.push_str(&format!("（{fqid}）"));
     }
     Some(summary)
 }
@@ -876,12 +1426,15 @@ fn encode_powershell(script: &str) -> String {
 }
 
 fn certificate_subject_contains(subject: &str, expected: &str) -> bool {
-    subject.split(',').any(|component| {
-        component
-            .split_once('=')
-            .map(|(_, value)| value.trim().eq_ignore_ascii_case(expected))
-            .unwrap_or(false)
-    })
+    static SUBJECT_COMPONENT: OnceLock<Regex> = OnceLock::new();
+    SUBJECT_COMPONENT
+        .get_or_init(|| {
+            Regex::new(r#"(?:^|,\s*)[^=,]+\s*=\s*(?:\"([^\"]*)\"|([^,]*))"#)
+                .expect("static certificate subject component regex")
+        })
+        .captures_iter(subject)
+        .filter_map(|captures| captures.get(1).or_else(|| captures.get(2)))
+        .any(|value| value.as_str().trim().eq_ignore_ascii_case(expected))
 }
 
 pub(crate) fn parse_msi_template_architecture(template: &str) -> Result<Architecture, String> {
@@ -946,18 +1499,20 @@ fn inspect_msix(path: &Path) -> Result<MsixIdentity, String> {
     manifest
         .read_to_string(&mut xml)
         .map_err(|error| format!("cannot read MSIX manifest: {error}"))?;
-    let identity_tag = Regex::new(r"(?is)<Identity\b[^>]*>")
-        .expect("static identity regex")
-        .find(&xml)
-        .map(|value| value.as_str())
+    parse_msix_manifest_identity(&xml)
+}
+
+fn parse_msix_manifest_identity(xml: &str) -> Result<MsixIdentity, String> {
+    let document = roxmltree::Document::parse(xml)
+        .map_err(|error| format!("invalid AppxManifest.xml: {error}"))?;
+    let identity = document
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "Identity")
         .ok_or_else(|| "MSIX manifest has no Identity tag".to_owned())?;
-    let attr = |name: &str| -> Result<String, String> {
-        let pattern = format!(r#"(?i)\b{}\s*=\s*[\"']([^\"']+)[\"']"#, regex::escape(name));
-        Regex::new(&pattern)
-            .map_err(|error| error.to_string())?
-            .captures(identity_tag)
-            .and_then(|captures| captures.get(1))
-            .map(|value| value.as_str().to_owned())
+    let attr = |name: &str| {
+        identity
+            .attribute(name)
+            .map(ToOwned::to_owned)
             .ok_or_else(|| format!("MSIX Identity is missing {name}"))
     };
     let architecture = match attr("ProcessorArchitecture")?.to_ascii_lowercase().as_str() {
@@ -979,12 +1534,16 @@ mod tests {
     use std::path::Path;
     use std::process::{Command, Stdio};
 
+    use base64::Engine;
+
     use super::{
-        INSTALL_MSIX_SCRIPT, RegistryEntryOutput, detect_hermes_fixed_install_at_with,
-        detect_product, encode_powershell, expected_executable_machine, hide_console_window,
-        known_installer_error, matches_registry_entry, parse_msi_template_architecture,
-        select_registry_detection, summarize_installer_error, trusted_msiexec_program,
-        trusted_powershell_program, verify_artifact,
+        CLAUDE_PROVISION_SCRIPT_TEMPLATE, DETECTION_SCRIPT, INSTALL_MSIX_SCRIPT,
+        RegistryEntryOutput, certificate_subject_contains, detect_hermes_fixed_install_at_with,
+        detect_product, encode_powershell, expected_executable_machine, extract_msix_error_marker,
+        hide_console_window, known_installer_error, matches_registry_entry,
+        parse_msi_template_architecture, powershell_literal_path, select_registry_detection,
+        summarize_installer_error, trusted_msiexec_program, trusted_powershell_program,
+        verify_artifact,
     };
     use crate::core::{
         Architecture, OperatingSystem, PackageKind, ProductId, TrustRegistry, WindowsPeMachine,
@@ -1039,6 +1598,36 @@ mod tests {
         .unwrap();
     }
 
+    #[test]
+    fn msix_manifest_publisher_is_compared_after_xml_entity_decoding() {
+        let identity = super::parse_msix_manifest_identity(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10">
+  <Identity Name="Claude" Publisher="CN=&quot;Anthropic, PBC&quot;, O=&quot;Anthropic, PBC&quot;" Version="1.26832.0" ProcessorArchitecture="x64" />
+</Package>"#,
+        )
+        .unwrap();
+        assert_eq!(identity.name, "Claude");
+        assert_eq!(
+            identity.publisher,
+            "CN=\"Anthropic, PBC\", O=\"Anthropic, PBC\""
+        );
+        assert_eq!(identity.version, "1.26832.0");
+        assert_eq!(identity.architecture, Architecture::X64);
+    }
+
+    #[test]
+    fn detection_script_uses_one_bounded_snapshot_without_silent_failures() {
+        assert!(DETECTION_SCRIPT.contains("$allProducts"));
+        assert!(DETECTION_SCRIPT.contains("$includeAppx"));
+        assert!(DETECTION_SCRIPT.contains("$includeRegistry"));
+        assert!(DETECTION_SCRIPT.contains("Get-AppxPackage -Name"));
+        assert!(DETECTION_SCRIPT.contains("-PackageTypeFilter Main"));
+        assert!(DETECTION_SCRIPT.contains("appx_error"));
+        assert!(DETECTION_SCRIPT.contains("registry_error"));
+        assert!(!DETECTION_SCRIPT.contains("SilentlyContinue"));
+    }
+
     fn workbuddy_registry_entry(display_icon: Option<String>) -> RegistryEntryOutput {
         RegistryEntryOutput {
             display_name: "WorkBuddy 5.3.8.34705286".into(),
@@ -1065,10 +1654,32 @@ mod tests {
     }
 
     #[test]
+    fn certificate_subject_parser_preserves_quoted_commas() {
+        let subject = r#"CN="Anthropic, PBC", O="Anthropic, PBC", L=San Francisco, C=US"#;
+        assert!(certificate_subject_contains(subject, "Anthropic, PBC"));
+        assert!(certificate_subject_contains(subject, "San Francisco"));
+        assert!(!certificate_subject_contains(subject, "Anthropic"));
+    }
+
+    #[test]
     fn msix_install_uses_the_supported_path_parameter_and_closes_the_target_app() {
         assert!(INSTALL_MSIX_SCRIPT.contains("Add-AppxPackage -Path"));
         assert!(INSTALL_MSIX_SCRIPT.contains("-ForceTargetApplicationShutdown"));
+        assert!(INSTALL_MSIX_SCRIPT.contains("$ProgressPreference = 'SilentlyContinue'"));
+        assert!(INSTALL_MSIX_SCRIPT.contains("EASY_AGENT_MSIX_ERROR"));
         assert!(!INSTALL_MSIX_SCRIPT.contains("-LiteralPath"));
+    }
+
+    #[test]
+    fn claude_msix_uses_the_official_machine_wide_offline_command() {
+        let msix = Path::new(r"C:\Temp\easy agent\Claude.msix");
+        let escaped = powershell_literal_path(msix, "fixture").unwrap();
+        let script = CLAUDE_PROVISION_SCRIPT_TEMPLATE.replace("__PACKAGE_PATH__", &escaped);
+        assert!(script.contains("Add-AppxProvisionedPackage -Online"));
+        assert!(script.contains("-SkipLicense -Regions 'all'"));
+        assert!(script.contains(r"C:\Temp\easy agent\Claude.msix"));
+        assert!(!script.contains("http://"));
+        assert!(!script.contains("https://"));
     }
 
     #[test]
@@ -1083,6 +1694,29 @@ mod tests {
             known_installer_error(PackageKind::Msi, 1618).as_deref(),
             Some("另一项 Windows Installer 操作正在进行")
         );
+    }
+
+    #[test]
+    fn msix_error_marker_wins_over_clixml_progress_noise() {
+        let message =
+            base64::engine::general_purpose::STANDARD.encode("部署失败，因为当前用户没有所需权限");
+        let fqid = base64::engine::general_purpose::STANDARD.encode("DeploymentError");
+        let stderr = format!(
+            "#< CLIXML <Objs><Obj>大量进度数据</Obj></Objs> EASY_AGENT_MSIX_ERROR HRESULT=0x80070005 MESSAGE_B64={message} FQID_B64={fqid}"
+        );
+        let summary = summarize_installer_error(b"", stderr.as_bytes()).unwrap();
+        assert_eq!(
+            summary,
+            "MSIX 部署失败（HRESULT 0x80070005）：部署失败，因为当前用户没有所需权限（DeploymentError）"
+        );
+        assert_eq!(extract_msix_error_marker("", &stderr), Some(summary));
+    }
+
+    #[test]
+    fn clixml_without_a_marker_is_replaced_with_a_readable_message() {
+        let summary = summarize_installer_error(b"", b"#< CLIXML <Objs></Objs>").unwrap();
+        assert!(!summary.contains("<Objs>"));
+        assert!(summary.contains("新版 easy agent"));
     }
 
     #[test]
