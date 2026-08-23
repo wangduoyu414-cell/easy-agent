@@ -147,7 +147,7 @@ APPLE_NOTARY_PROFILE='easy-agent-notary' \
 ALLOW_UNSIGNED_MACOS_BUILD=1 ./packaging/build-macos.sh
 ```
 
-该模式只做 ad-hoc codesign，并强制生成带 `UNNOTARIZED-VALIDATION` 的 Universal DMG/哈希，不执行 notarization 或 Gatekeeper 通过声明；不得改成正式文件名或放入终端用户下载页。`.github/workflows/build-macos-validation.yml` 使用同一模式，适合在私有 GitHub macOS runner 上生成短期验证产物。
+该模式只做 ad-hoc codesign，并强制生成带 `UNNOTARIZED-VALIDATION` 的 Universal DMG/哈希，不执行 notarization 或 Gatekeeper 通过声明；不得改成正式文件名、标记为正式版或设置为 GitHub 的 latest release。它可以作为明确标注限制的 GitHub prerelease 资产供受控下载验证，但 Release 说明必须写明 Gatekeeper 会阻止普通安装，且不得提供关闭 Gatekeeper 或删除 quarantine 的绕过说明。`.github/workflows/build-macos-validation.yml` 用于短期 Actions 产物，`.github/workflows/publish-preview-release.yml` 用于持久的公开预览附件。
 
 ## 仓库卫生
 

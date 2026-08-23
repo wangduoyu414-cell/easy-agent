@@ -166,16 +166,17 @@ mirror_max_stale_seconds = 604800
     let manifest = include_bytes!("fixtures/claude-mirror/latest.json");
     let signature = include_str!("fixtures/claude-mirror/latest.json.minisig");
     let candidate =
-        candidate_from_verified_claude_mirror(manifest, signature, trust, 1786466760).unwrap();
+        candidate_from_verified_claude_mirror(manifest, signature, trust, 1787504059).unwrap();
     assert!(matches!(
         candidate.source,
         ArtifactSource::VerifiedMirror { .. }
     ));
+    assert_eq!(candidate.version, "1.34493.1");
     assert_eq!(candidate.package_kind, PackageKind::Msix);
-    assert_eq!(candidate.expected_size, Some(266_210_150));
+    assert_eq!(candidate.expected_size, Some(247_405_438));
     assert_eq!(
         candidate.expected_sha256.as_deref(),
-        Some("6dc210bca31b55c9fa307d11c6b13a42c7f3a3886ccc35ca2ecb7e9fceba0139")
+        Some("ad5ead595fec1977c0ccb1d7fab3be040773b716451431dbd6bab457ba31a55c")
     );
     assert!(candidate.download_url.path().ends_with("/Claude.msix"));
     assert!(candidate.bootstrap_payload.is_none());
@@ -183,7 +184,7 @@ mirror_max_stale_seconds = 604800
     let mut tampered = manifest.to_vec();
     tampered[0] ^= 1;
     assert!(
-        candidate_from_verified_claude_mirror(&tampered, signature, trust, 1786466760).is_err()
+        candidate_from_verified_claude_mirror(&tampered, signature, trust, 1787504059).is_err()
     );
 }
 

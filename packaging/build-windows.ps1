@@ -12,14 +12,24 @@ $binaryName = 'easy-agent'
 $sourceExe = Join-Path $repoRoot "target\$target\release\$binaryName.exe"
 $outputExe = Join-Path $distDir "$binaryName-$suffix.exe"
 
+function Invoke-CargoChecked {
+    param([string[]]$Arguments)
+
+    & cargo @Arguments
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "cargo $($Arguments -join ' ') failed with exit code $exitCode"
+    }
+}
+
 Push-Location $repoRoot
 try {
-    cargo fmt --all -- --check
-    cargo check --all-targets
-    cargo clippy --all-targets --all-features -- -D warnings
-    cargo test --test resolver_fixtures
-    cargo test --test security_boundaries
-    cargo build --release --target $target
+    Invoke-CargoChecked -Arguments @('fmt', '--all', '--', '--check')
+    Invoke-CargoChecked -Arguments @('check', '--all-targets')
+    Invoke-CargoChecked -Arguments @('clippy', '--all-targets', '--all-features', '--', '-D', 'warnings')
+    Invoke-CargoChecked -Arguments @('test', '--test', 'resolver_fixtures')
+    Invoke-CargoChecked -Arguments @('test', '--test', 'security_boundaries')
+    Invoke-CargoChecked -Arguments @('build', '--release', '--target', $target)
     New-Item -ItemType Directory -Force -Path $distDir | Out-Null
     Copy-Item -LiteralPath $sourceExe -Destination $outputExe -Force
     $hash = (Get-FileHash -LiteralPath $outputExe -Algorithm SHA256).Hash.ToLowerInvariant()

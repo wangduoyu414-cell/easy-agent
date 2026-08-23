@@ -1,0 +1,3 @@
+# Detached signatures bind the exact fixture bytes, including line endings.
+tests/fixtures/claude-mirror/latest.json -text
+tests/fixtures/claude-mirror/latest.json.minisig -text

@@ -1,11 +1,12 @@
 # 安装 easy agent
 
-`easy agent` 是桌面应用的安全安装助手，不是远程脚本下载器。安装或构建前，请先阅读 [README](../README.md) 中的当前验证状态；当前并没有可宣称为生产级的已签名用户发行版。
+`easy agent` 是桌面应用的安全安装助手，不是远程脚本下载器。安装或构建前，请先阅读 [README](../README.md) 中的当前验证状态；GitHub Releases 已提供测试预览 EXE 和 DMG，但当前并没有可宣称为生产级的已签名用户发行版。
 
 ## 选择正确的安装路径
 
 | 目标 | 推荐路径 | 何时使用 |
 | --- | --- | --- |
+| 下载公开测试包 | [`v0.1.0-preview.1`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.1) | Windows EXE 可用于受控测试；完整干净机证据对应 `e7b7eae`，本标签仍待重跑安装矩阵；未公证 DMG 只用于下载、结构和签名验证。 |
 | 日常使用 | 将来的 GitHub Release 已签名制品 | 仅当 Release 说明同时给出版本、SHA-256 和签名/公证状态时。 |
 | 评估当前代码 | `cargo run --release` | 开发者在受控本机直接运行。 |
 | 验证 Windows 包 | `packaging/build-windows.ps1` | 需要一个带 Windows 资源图标的便携 EXE。 |
@@ -21,15 +22,17 @@ Windows 刷新状态时，本机安装检测和联网获取最新版本是两个
 
 直接下载安装的 EXE、MSI、MSIX、DMG、ZIP 和 tar.gz 在验证通过后都会额外保存一份到当前用户的系统“下载”目录，文件名包含产品和版本；安装本身仍使用防篡改的私有暂存副本。若下载目录已有不同内容的同名文件，easy agent 会添加 SHA-256 摘要后缀，不会覆盖原文件。Windows ChatGPT 默认下载并启动微软轻量安装器；网络/分发服务不可用或返回 `1612/0x64C` 安装源缺失时，自动下载 OpenAI 完整 MSIX 和离线许可证并请求管理员部署，临时文件不作为用户安装包长期保存。
 
-## 从将来的 GitHub Release 安装
+## 从 GitHub Release 下载
 
-正式发布时，请只在 [Releases](https://github.com/wangduoyu414-cell/easy-agent/releases) 页面选择与系统匹配的文件：
+请只在 [Releases](https://github.com/wangduoyu414-cell/easy-agent/releases) 页面选择与系统匹配的文件：
 
 | 系统 | 预期文件 | 安装方式 |
 | --- | --- | --- |
 | Windows x64 | `easy-agent-windows-x64.exe` | 下载后核对 SHA-256，直接运行。 |
 | Windows ARM64 | `easy-agent-windows-arm64.exe` | 下载后核对 SHA-256，直接运行。 |
 | macOS Intel / Apple Silicon | `easy-agent-macos-universal.dmg` | 下载后核对 SHA-256，挂载并将 `easy agent.app` 移到 Applications。 |
+
+测试预览版的 macOS 文件名为 `easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg`，不能按正式 DMG 的安装预期使用。只有文件名为 `easy-agent-macos-universal.dmg` 且 Release 明确说明 Developer ID 签名、公证和 stapling 均通过时，才属于正式 macOS 下载。
 
 Windows PowerShell 校验示例：
 

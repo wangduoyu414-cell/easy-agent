@@ -26,7 +26,20 @@
 </p>
 
 > [!IMPORTANT]
-> `easy agent` 目前处于安全验证阶段，而非已签名的终端用户发行版。它不会通过跳过校验、绕过 Gatekeeper 或猜测下载地址来假装“可安装”。请只从 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases) 下载将来发布的已签名制品；当前可用的是下方列出的本地构建和验证路径。
+> `easy agent` 目前处于安全验证阶段，而非已签名的终端用户发行版。GitHub Releases 提供可长期下载的测试预览 EXE 和 DMG，但 Windows 文件尚未做 Authenticode 签名，macOS 文件尚未经过 Apple 公证。它不会通过跳过校验、绕过 Gatekeeper 或猜测下载地址来假装“可安装”。
+
+## 下载测试预览版
+
+当前预览版本为 [`v0.1.0-preview.1`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.1)：
+
+| 系统 | 下载 | 当前限制 |
+| --- | --- | --- |
+| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/easy-agent-windows-x64.exe) | 核心安装链在 `e7b7eae` 完成干净 Windows 11 虚拟机测试；本标签尚未重跑完整安装矩阵，EXE 未签名。 |
+| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/easy-agent-windows-arm64.exe) | 可交叉构建；仍需 ARM64 真机验收，EXE 未签名。 |
+| macOS Intel / Apple Silicon | [下载 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，Gatekeeper 会阻止普通安装；仍需对应 Mac 真机验收。 |
+| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/SHA256SUMS.txt) | 下载后先核对文件摘要。 |
+
+不要关闭 Gatekeeper、删除 quarantine 或忽略系统签名警告来把测试包当作正式版使用。所有历史预览与后续正式版本都在 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 
 ## 30 秒了解
 
@@ -46,12 +59,13 @@
 
 | 场景 | Windows | macOS |
 | --- | --- | --- |
+| 下载测试预览版 | 从上方 Release 下载 `easy-agent-windows-*.exe`。 | 从上方 Release 下载带 `UNNOTARIZED-VALIDATION` 标记的 Universal DMG，仅用于受控验证。 |
 | 使用正式发行版 | 正式签名 EXE 发布后，从 [Releases](https://github.com/wangduoyu414-cell/easy-agent/releases) 下载 `easy-agent-windows-*.exe`。 | Developer ID 签名并公证的 DMG 发布后，从 Releases 下载 `easy-agent-macos-universal.dmg`。 |
 | 本地试运行 | 安装 Rust 后运行 `cargo run --release`。 | 安装 Xcode Command Line Tools 与 Rust 后运行 `cargo run --release`。 |
 | 构建可携带验证包 | `./packaging/build-windows.ps1 -Architecture x64` | `ALLOW_UNSIGNED_MACOS_BUILD=1 ./packaging/build-macos.sh` |
 | 验证产物完整性 | `Get-FileHash -Algorithm SHA256 .\dist\easy-agent-windows-x64.exe` | 正式公证包：`shasum -a 256 dist/easy-agent-macos-universal.dmg`；内部验证包文件名必须带 `UNNOTARIZED-VALIDATION` |
 
-当前没有可宣称为生产级的终端用户安装包。未公证的 macOS 验证 DMG 会被 Gatekeeper 拒绝，这是预期安全行为；请不要要求用户关闭 Gatekeeper 或移除 quarantine 来绕过它。
+当前没有可宣称为生产级的终端用户安装包。Release 中的预览资产用于下载与受控测试；未公证的 macOS 验证 DMG 会被 Gatekeeper 拒绝，这是预期安全行为。
 
 ## 它如何工作
 

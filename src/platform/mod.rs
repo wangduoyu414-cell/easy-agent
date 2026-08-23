@@ -131,7 +131,7 @@ pub fn detect_products(
 ) -> HashMap<ProductId, Detection> {
     #[cfg(windows)]
     {
-        return windows::detect_products(registry, platform.architecture, products).unwrap_or_else(
+        windows::detect_products(registry, platform.architecture, products).unwrap_or_else(
             |error| {
                 products
                     .iter()
@@ -139,7 +139,7 @@ pub fn detect_products(
                     .map(|product| (product, Detection::failed(error.to_string())))
                     .collect()
             },
-        );
+        )
     }
     #[cfg(not(windows))]
     {
