@@ -30,14 +30,14 @@
 
 ## 下载测试预览版
 
-当前预览版本为 [`v0.1.0-preview.1`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.1)：
+当前预览版本为 [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2)：
 
 | 系统 | 下载 | 当前限制 |
 | --- | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/easy-agent-windows-x64.exe) | 核心安装链在 `e7b7eae` 完成干净 Windows 11 虚拟机测试；本标签尚未重跑完整安装矩阵，EXE 未签名。 |
-| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/easy-agent-windows-arm64.exe) | 可交叉构建；仍需 ARM64 真机验收，EXE 未签名。 |
-| macOS Intel / Apple Silicon | [下载 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，Gatekeeper 会阻止普通安装；仍需对应 Mac 真机验收。 |
-| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.1/SHA256SUMS.txt) | 下载后先核对文件摘要。 |
+| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-x64.exe) | 核心安装链在 `e7b7eae` 完成干净 Windows 11 虚拟机测试；本标签尚未重跑完整安装矩阵，EXE 未签名。 |
+| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-arm64.exe) | 可交叉构建；仍需 ARM64 真机验收，EXE 未签名。 |
+| macOS Intel / Apple Silicon | [下载 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，Gatekeeper 会阻止普通安装；仍需对应 Mac 真机验收。 |
+| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/SHA256SUMS.txt) | 下载后先核对文件摘要。 |
 
 不要关闭 Gatekeeper、删除 quarantine 或忽略系统签名警告来把测试包当作正式版使用。所有历史预览与后续正式版本都在 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 

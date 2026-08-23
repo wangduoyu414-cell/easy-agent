@@ -773,7 +773,9 @@ package_kinds = ["msi"]
     );
     let updates = updates.lock().unwrap();
     assert_eq!(updates.len(), 4);
-    for (updates, result) in updates.chunks_exact(2).zip(&results) {
+    let (update_pairs, remainder) = updates.as_chunks::<2>();
+    assert!(remainder.is_empty());
+    for (updates, result) in update_pairs.iter().zip(&results) {
         assert_eq!(updates[0].product, result.product);
         assert_eq!(updates[0].state, easy_agent::core::OperationState::Ready);
         assert_eq!(updates[1].product, result.product);

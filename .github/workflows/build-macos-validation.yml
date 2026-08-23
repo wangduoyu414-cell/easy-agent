@@ -17,6 +17,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.95.0
           targets: x86_64-apple-darwin,aarch64-apple-darwin
           components: rustfmt,clippy
 

@@ -41,6 +41,7 @@
 - Impact: the documented quality gate and packaging validation cannot pass with the current stable toolchain on this host.
 - Status: Confirmed; not fixed in this test pass.
 - 2026-08-23 release follow-up: resolved by returning the Windows detection expression directly. `cargo clippy --all-targets --all-features -- -D warnings` passes on the current Windows host.
+- 2026-08-23 remote follow-up: GitHub's newer Rust 1.98 added `clippy::chunks-exact-to-as-chunks` in a test. The test now uses `as_chunks::<2>()`, and release workflows pin Rust 1.95.0 so future stable-channel drift cannot silently change the release gate.
 
 ### EA-TEST-003 — Windows packaging continues after failed validation
 
