@@ -6,7 +6,7 @@
 
 | 目标 | 推荐路径 | 何时使用 |
 | --- | --- | --- |
-| 下载公开测试包 | [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2) | Windows EXE 可用于受控测试；完整干净机证据对应 `e7b7eae`，本标签仍待重跑安装矩阵；未公证 DMG 只用于下载、结构和签名验证。 |
+| 下载公开测试包 | [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动；EXE 未签名。未公证 DMG 只用于受控验证。 |
 | 日常使用 | 将来的 GitHub Release 已签名制品 | 仅当 Release 说明同时给出版本、SHA-256 和签名/公证状态时。 |
 | 评估当前代码 | `cargo run --release` | 开发者在受控本机直接运行。 |
 | 验证 Windows 包 | `packaging/build-windows.ps1` | 需要一个带 Windows 资源图标的便携 EXE。 |
@@ -33,6 +33,15 @@ Windows 刷新状态时，本机安装检测和联网获取最新版本是两个
 | macOS Intel / Apple Silicon | `easy-agent-macos-universal.dmg` | 下载后核对 SHA-256，挂载并将 `easy agent.app` 移到 Applications。 |
 
 测试预览版的 macOS 文件名为 `easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg`，不能按正式 DMG 的安装预期使用。只有文件名为 `easy-agent-macos-universal.dmg` 且 Release 明确说明 Developer ID 签名、公证和 stapling 均通过时，才属于正式 macOS 下载。
+
+## 成品使用前提与已知限制
+
+- Windows 图形界面需要 OpenGL 2.0 或更高版本。普通 Windows 10/11 实机通常由显卡驱动提供；缺少有效图形驱动的旧电脑或受限虚拟机可能无法启动。
+- Windows ARM64 当前只启用 Claude 和 ChatGPT；WorkBuddy、Hermes 和 CC Switch 会明确显示不可用，仍需 ARM64 真机完成整机验收。
+- ChatGPT Windows 的微软分发链不提供稳定、可直接比较的公开“最新版本号”。程序能识别本机精确版本，但即使已经是最新版，“更新”按钮仍可能可用，表示让微软检查并安装可用版本。
+- Hermes Windows 不要求用户预装 Node、Python、Git 等开发工具，厂商 bootstrap 会自行准备；干净环境建议约 5 GB 可用内存、数 GB 磁盘空间和约 30 分钟安装时间。
+- WorkBuddy 使用可见厂商向导，用户需要选择安装范围、确认目录并完成向导；长时间停留在安装中时先检查厂商窗口是否等待操作。
+- macOS 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT。Hermes Intel 不支持，Apple Silicon bootstrap 已识别但当前禁用。
 
 Windows PowerShell 校验示例：
 

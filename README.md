@@ -17,62 +17,47 @@
 </p>
 
 <p align="center">
-  <a href="#安装">安装</a> ·
-  <a href="#它如何工作">工作方式</a> ·
-  <a href="#平台与交付状态">平台状态</a> ·
+  <a href="#下载与安装">下载与安装</a> ·
+  <a href="#工作方式">工作方式</a> ·
+  <a href="#平台状态">平台状态</a> ·
   <a href="#安全边界">安全边界</a> ·
   <a href="docs/installation.md">完整安装指南</a> ·
   <a href="CONTRIBUTING.md">参与贡献</a>
 </p>
 
 > [!IMPORTANT]
-> `easy agent` 目前处于安全验证阶段，而非已签名的终端用户发行版。GitHub Releases 提供可长期下载的测试预览 EXE 和 DMG，但 Windows 文件尚未做 Authenticode 签名，macOS 文件尚未经过 Apple 公证。它不会通过跳过校验、绕过 Gatekeeper 或猜测下载地址来假装“可安装”。
+> `easy agent` 目前是测试预览版，不是已签名的正式发行版。Windows EXE 尚未做 Authenticode 签名，macOS DMG 尚未经过 Apple 公证。请勿关闭 Gatekeeper、删除 quarantine 或忽略系统签名警告来绕过验证。
 
-## 下载测试预览版
+## 下载与安装
 
-当前预览版本为 [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2)：
+当前版本为 [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2)：
 
-| 系统 | 下载 | 当前限制 |
+| 系统 | 下载 | 已验证范围与限制 |
 | --- | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-x64.exe) | 核心安装链在 `e7b7eae` 完成干净 Windows 11 虚拟机测试；本标签尚未重跑完整安装矩阵，EXE 未签名。 |
-| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-arm64.exe) | 可交叉构建；仍需 ARM64 真机验收，EXE 未签名。 |
-| macOS Intel / Apple Silicon | [下载 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，Gatekeeper 会阻止普通安装；仍需对应 Mac 真机验收。 |
-| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/SHA256SUMS.txt) | 下载后先核对文件摘要。 |
+| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中五款客户端的真实首次安装、复检和独立启动均已通过；EXE 未签名。 |
+| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
+| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，只用于受控验证；仍需 Apple Silicon 真机验收。 |
+| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/SHA256SUMS.txt) | 运行前核对文件摘要。 |
 
-不要关闭 Gatekeeper、删除 quarantine 或忽略系统签名警告来把测试包当作正式版使用。所有历史预览与后续正式版本都在 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
+完整步骤、环境要求和排错见 [安装指南](docs/installation.md)。所有版本见 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 
-## 30 秒了解
+## 项目简介
 
-`easy agent` 管理固定的五款客户端：WorkBuddy、Hermes Agent、CC Switch、Claude Desktop 和 ChatGPT。它不是软件管家，也不执行来自网页的脚本；它把官方入口、少数产品专用的受验证网络回退边界、包类型、签名主体、Bundle/Package 身份和架构规则编译进应用，以“证据不足即停止”为原则执行安装。
+`easy agent` 只管理 WorkBuddy、Hermes Agent、CC Switch、Claude Desktop 和 ChatGPT。它不是通用软件管家，也不执行网页返回的脚本；官方入口、包类型、签名主体、Bundle/Package 身份和架构规则均固定在应用内，证据不足时停止安装。
 
-| 你会得到什么 | 它如何做到 |
+| 能力 | 说明 |
 | --- | --- |
-| 一个简洁的原生桌面界面 | 识别本机平台和已安装版本，逐项显示安装/更新状态。 |
-| 多个客户端可以同时处理 | 每个产品独立下载、校验、取消和显示错误；真正写入系统及安装后复检按先后排队，避免多个系统安装器互相干扰。 |
-| 只使用固定可信来源 | 默认先访问固定官方入口；只有明确的网络/地区可用性失败才能进入产品专用回退。回退清单签名、时效、大小、摘要和厂商平台签名必须全部通过，远端响应不能扩展信任边界。 |
-| Windows 与 macOS 的同一安全编排 | 私有暂存下载、摘要/签名/身份/架构验证、验证后保存可见副本到系统“下载”目录、仍从私有副本执行、安装后版本复检。 |
-| 可解释的失败 | 不支持、验证待完成、取消、下载失败和“结果未知”被明确区分，不伪造成功。 |
+| 本机状态识别 | 检测平台、安装状态和已安装版本，并分别显示安装、更新或不可用原因。 |
+| 可信下载与验证 | 官方入口优先；产品专用回退只有在明确网络或地区不可用时才允许，并继续验证签名、摘要、版本和身份。 |
+| 安全执行 | 私有暂存、执行前二次绑定、结构化安装命令、安装后身份/架构/版本复检。 |
+| 多任务与可解释失败 | 产品任务相互隔离；下载、取消、验证失败、结果未知等状态不会被伪装成成功。 |
 
-## 安装
-
-详细步骤、签名校验和排错见 [完整安装指南](docs/installation.md)。选择适合你的路径：
-
-| 场景 | Windows | macOS |
-| --- | --- | --- |
-| 下载测试预览版 | 从上方 Release 下载 `easy-agent-windows-*.exe`。 | 从上方 Release 下载带 `UNNOTARIZED-VALIDATION` 标记的 Universal DMG，仅用于受控验证。 |
-| 使用正式发行版 | 正式签名 EXE 发布后，从 [Releases](https://github.com/wangduoyu414-cell/easy-agent/releases) 下载 `easy-agent-windows-*.exe`。 | Developer ID 签名并公证的 DMG 发布后，从 Releases 下载 `easy-agent-macos-universal.dmg`。 |
-| 本地试运行 | 安装 Rust 后运行 `cargo run --release`。 | 安装 Xcode Command Line Tools 与 Rust 后运行 `cargo run --release`。 |
-| 构建可携带验证包 | `./packaging/build-windows.ps1 -Architecture x64` | `ALLOW_UNSIGNED_MACOS_BUILD=1 ./packaging/build-macos.sh` |
-| 验证产物完整性 | `Get-FileHash -Algorithm SHA256 .\dist\easy-agent-windows-x64.exe` | 正式公证包：`shasum -a 256 dist/easy-agent-macos-universal.dmg`；内部验证包文件名必须带 `UNNOTARIZED-VALIDATION` |
-
-当前没有可宣称为生产级的终端用户安装包。Release 中的预览资产用于下载与受控测试；未公证的 macOS 验证 DMG 会被 Gatekeeper 拒绝，这是预期安全行为。
-
-## 它如何工作
+## 工作方式
 
 ```text
 检测平台与现有安装
         ↓
-解析内置的可信分发合同（官方优先）
+解析内置可信分发合同
         ↓
 私有暂存下载 + 受控重定向
         ↓
@@ -82,44 +67,45 @@
         ↓
 Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原子替换 .app
         ↓
-安装后精确身份、架构和版本复检
+安装后精确复检
 ```
 
-在 macOS 上，应用自身是一个包含 Intel 和 Apple Silicon slice 的 Universal `.app`；下游包按照实际硬件而非当前进程 slice 选择。DMG 只读挂载，ZIP/tar.gz 在展开前后检查路径穿越、链接逃逸、重复路径和大小上限；新应用先在目标卷的私有暂存目录复验，再原子替换，最终复验失败会恢复旧版本。
+## 平台状态
 
-## 平台与交付状态
+| 平台 | 当前启用范围 | 当前结论 |
+| --- | --- | --- |
+| Windows x64 | WorkBuddy、Hermes、CC Switch、Claude、ChatGPT | 干净 Windows 11 中五款真实首次安装、复检和启动通过；Windows 10 中 CC Switch 真实安装通过。更新、账号业务和少数故障场景尚未全部覆盖。 |
+| Windows ARM64 | Claude、ChatGPT | 单文件 EXE、PE 架构、图标和版本资源已验证；WorkBuddy、Hermes、CC Switch 仍禁用，整机使用需 ARM64 真机验证。 |
+| macOS Intel | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes 不支持 | 四款直接应用包的下载、Apple 身份、临时安装、更新和回滚链已验证；验证 DMG 未公证。 |
+| macOS Apple Silicon | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes bootstrap 禁用 | ARM64/Universal 包身份和架构链已验证；仍需 Apple Silicon 真机启动与使用验收。 |
 
-| 平台 | easy agent 应用 | 厂商客户端操作 | 当前结论 |
-| --- | --- | --- | --- |
-| Windows x64 | 原生单文件 EXE 构建链已具备 | 五款产品的受控解析/验证/执行链已实现 | 干净机首次安装与更新矩阵仍待关闭。 |
-| Windows ARM64 | 原生单文件 EXE 已可交叉构建 | Claude 等提供 ARM64 包的产品按各自合同启用 | PE/图标/版本资源已验证；仍需 Windows ARM64 真机启动与安装矩阵。 |
-| macOS Intel | Universal 应用、检测、验证、原子复制/回滚已实现 | WorkBuddy、CC Switch、Claude、ChatGPT 已启用；Hermes 不支持 | 四款真实 x64 包已完成下载与 Apple 身份校验；正式 DMG 签名公证仍待发布凭据。 |
-| macOS Apple Silicon | 同一 Universal 应用原生运行 | WorkBuddy、CC Switch、Claude、ChatGPT 已启用；Hermes bootstrap 禁用 | 四款真实 ARM64/Universal 包已完成下载与 Apple 身份校验；仍需 Apple Silicon 真机启动验收。 |
+已知使用限制：
 
-macOS 按产品独立处理：WorkBuddy 的官方 API SHA-256 已确认错误，因此只在 WorkBuddy/macOS 上改用 Apple 平台签名、固定 Team/Bundle/版本/架构和稳定文件绑定；其他产品仍严格执行自己的摘要或 updater 签名。ChatGPT 固定官方 appcast 与 ZIP 直连优先，只有明确网络可用性失败时才使用签名副本，并继续强制 OpenAI Sparkle 与 Apple 双重签名。Claude 公开稳定重定向在当前地区会被拦截，因此 Intel 与 Apple Silicon 都可回退到固定香港清单；客户端仍必须验证 Claude Bundle/Team、版本、目标 slice、codesign 与 Gatekeeper。Hermes Apple Silicon DMG 仍是尚未建模最终桌面/runtime 状态的 vendor bootstrap。
+- 图形界面需要 OpenGL 2.0 或更高版本；缺少可用图形驱动的旧电脑或受限虚拟机可能无法启动。
+- Microsoft 没有提供稳定、可直接比较的 ChatGPT Windows“最新版本号”；已安装最新版时仍可能显示“更新”，该按钮表示让微软检查并安装可用版本。
+- Hermes Windows 安装器会自动准备 Node、Python、Git 等依赖，无需预装；干净环境建议约 5 GB 可用内存、数 GB 磁盘空间，并预留约 30 分钟。
+
+详细证据和未关闭项目见 [实现与验证状态](docs/implementation-status.md) 与 [多环境测试报告](evidence/multi-environment-test-2026-08-21.md)。
 
 ## 安全边界
 
-- 只管理五款固定客户端；受验证回退仅限固定的 Claude Windows/macOS 四个平台条目与 ChatGPT macOS 条目，不做通用镜像、远程规则平台或可由服务器扩展的客户端规则服务。
-- 不执行服务器返回的 PowerShell、Shell 或安装参数；平台命令均由本地编译代码构造。
-- 下载在私有临时目录进行，限制重定向、文件名和大小；验证通过后把可见副本保存到 Windows/macOS 的系统“下载”目录，但安装仍从绑定的私有副本执行，避免公开目录文件被替换。目标文件同名且内容不同时会使用摘要后缀，绝不覆盖用户已有文件。完整 URL、用户目录和临时目录会从操作日志中脱敏。ChatGPT Windows 的动态微软安装器和完整离线部署包只在私有暂存中执行，不作为长期下载副本保存。
-- Windows 使用固定系统工具、Authenticode/AppX 身份和架构检查；ChatGPT 每次下载并验证绑定固定 Store Product ID 的微软轻量安装器，网络、Windows Update、微软分发服务不可用或 `1612/0x64C` 安装源缺失时自动进入官方完整 MSIX 与离线许可证兜底，不探测或修复 WinGet/App Installer。
-- macOS 固定 Applications 中的应用名、Bundle ID、Developer Team ID、主 Mach-O slice、codesign 和 Gatekeeper 结果；CC Switch 验证 minisign，ChatGPT 验证 Sparkle Ed25519；不清除 quarantine。
-- 任一验证缺失、身份变化或版本合同变化时，默认停止并给出原因。
+- 只管理五款固定客户端；远端响应不能新增主机、包类型、签名主体或产品身份。
+- 不执行服务器返回的 PowerShell、Shell 或安装参数；平台命令由本地编译代码构造。
+- 下载在私有临时目录完成并限制重定向、文件名和大小；安装始终使用已绑定的私有副本。
+- Windows 验证 Authenticode、AppX/MSIX 身份和 PE 架构；macOS 验证 Bundle ID、Developer Team ID、Mach-O 架构、codesign 和 Gatekeeper。
+- 任一摘要、签名、身份、架构、版本合同或最终复检缺失时默认停止。
 
 ## 支持的客户端
 
-| 客户端 | Windows 分发策略 | macOS 分发策略 |
+| 客户端 | Windows | macOS |
 | --- | --- | --- |
-| WorkBuddy | 官方更新接口 + Authenticode / 最终 EXE 复检 | 官方架构 ZIP + Apple codesign/Gatekeeper + Bundle/Team/版本/架构复检 |
-| Hermes Agent | 官方 bootstrap，桌面与 runtime 状态分离 | Apple Silicon DMG bootstrap；Intel 明确不支持 |
-| CC Switch | 官方 `latest.json` + minisign + MSI | 官方签名 `tar.gz` + minisign + `.app` 复检 |
-| Claude Desktop | Anthropic 官方完整 MSIX（x64/ARM64）直连优先；明确可用性失败时使用香港签名清单中的同版本 MSIX；管理员方式机器级部署，安装阶段完全本地执行并复检 Claude Package 身份与版本 | 官方 Universal DMG 优先；Intel/Apple Silicon 在明确可用性失败时使用各自签名清单并继续验证同一 Universal 应用 |
-| ChatGPT | 固定微软轻量安装器；明确的微软网络/分发失败时使用对应架构官方 MSIX 与离线许可证；安装后复检 OpenAI Package Identity/Family/Publisher/架构 | OpenAI 官方 Intel / Apple Silicon appcast 与 ZIP 直连优先；元数据或完整包网络不可达时使用固定签名清单回退；始终验证 Sparkle Ed25519 与 Apple 身份 |
+| WorkBuddy | x64 官方更新接口、腾讯签名和最终 EXE 复检 | Intel/Apple Silicon 官方 ZIP 与 Apple 身份复检 |
+| Hermes Agent | x64 官方 bootstrap，桌面与 runtime 状态分离 | Intel 不支持；Apple Silicon bootstrap 已识别但当前禁用 |
+| CC Switch | x64 官方签名更新清单、minisign 和 MSI | Intel/Apple Silicon 签名归档、minisign 和 `.app` 复检 |
+| Claude Desktop | x64/ARM64 官方完整 MSIX；明确不可用时使用同版本签名回退 | Intel/Apple Silicon Universal DMG；明确不可用时使用同版本签名回退 |
+| ChatGPT | x64/ARM64 固定微软安装器；明确分发失败时使用官方完整 MSIX 与离线许可证 | Intel/Apple Silicon 官方 Sparkle appcast 与 ZIP；明确不可用时使用签名回退 |
 
-“支持”描述的是已编码的安全合同，不代表某个平台已绕过所有发布验证 Gate。点击操作仅在对应信任条目和平台证据都闭合后才会变为可用。
-
-Windows 上的 Claude 直接使用 Anthropic 官方部署文档公开的完整 MSIX。`easy agent` 先下载并验证 AppX 签名、Publisher、Identity、架构、版本和稳定文件身份，再通过本地固定的管理员部署命令写入系统；不会启动 Claude Setup，也不会在安装阶段再次下载约 253 MB 的组件。Cowork 仍可能要求启用 Windows 虚拟机平台并重启。此链路只解决安装包获取和本地安装，不代理 Claude 登录或运行流量；中国大陆也不在 Anthropic 当前官方支持地区列表中。
+“支持”表示对应安全合同已启用，不代表正式发布签名、真机或账号业务测试已经全部完成。
 
 ## 开发与验证
 
@@ -127,27 +113,18 @@ Windows 上的 Claude 直接使用 Anthropic 官方部署文档公开的完整 M
 cargo fmt --all -- --check
 cargo test --all-targets
 cargo clippy --all-targets --all-features -- -D warnings
-cargo check --all-targets --target x86_64-apple-darwin
-cargo check --all-targets --target aarch64-apple-darwin
 ```
 
-在 macOS 上复现 Windows 双架构验证构建需先安装 `cargo-xwin` 与 Homebrew LLVM，然后运行 `./packaging/build-windows-from-macos.sh all`。
+本地运行、Windows/macOS 构建和制品校验命令见 [安装指南](docs/installation.md)。品牌资源说明见 [assets/branding](assets/branding/README.md)。
 
-品牌资源包含原始 PNG、运行时 PNG、Windows `.ico` 和 macOS `.icns`。`cargo test --test branding_contract` 会检查窗口、Windows 资源脚本与 macOS Bundle 的名称/图标一致性。图标来源和维护说明见 [assets/branding](assets/branding/README.md)。
+## 文档
 
-## 文档、贡献与传播
-
-- [完整安装指南](docs/installation.md)：正式发行版、本地构建、验证 DMG 和校验方法。
-- [GitHub 首页设计记录](docs/github-homepage-design.md)：对 Ollama、Tauri、LocalSend、RustDesk 的主页模式调研与本仓库取舍。
-- [实现与验证状态](docs/implementation-status.md)：已完成能力、可复现实证与未关闭 Gate。
-- [macOS 功能链路审计](evidence/macos-functional-parity-audit-2026-08-08.md)：Windows/macOS 阶段对照、双架构完整包、激活/回滚和当前支持矩阵。
-- [Claude 接入与镜像交叉审计](evidence/claude-integration-audit-2026-08-12.md)：官方分发合同、当前私有部署、客户端落点、Cowork 边界和公网硬门。
-- [easy agent macOS 品牌构建证据](evidence/easy-agent-branding-macos-proof-2026-08-04.md)：新图标、Universal DMG、签名、挂载和 Intel 启动验证。
-- [维护手册](docs/maintenance.md)：更新信任根、官方来源和平台证据时必须遵守的规则。
+- [安装指南](docs/installation.md)：下载、环境要求、构建、校验和排错。
+- [实现与验证状态](docs/implementation-status.md)：当前支持矩阵、真实测试结果和剩余 Gate。
+- [维护手册](docs/maintenance.md)：信任根、官方来源、回退服务和发布维护规则。
+- [GitHub 首页设计记录](docs/github-homepage-design.md)：主页结构的调研与取舍。
 - [参与贡献](CONTRIBUTING.md)：测试要求、文档规范与安全变更流程。
-
-欢迎提交可复现的问题、平台验证证据和文档改进。涉及下载源、签名、Bundle/Package 身份、架构或安装行为的变更必须附带官方依据与可复核证据；请勿在 Issue 中粘贴令牌、账号信息或完整临时下载 URL。
 
 ## 许可
 
-本项目使用 [MIT License](LICENSE)。第三方客户端及其商标、安装包和服务条款均归各自权利人所有。仓库不提交第三方安装包；部署产品专用受验证回退服务时，运营者仍需自行确认对应的软件分发与服务条款。
+本项目使用 [MIT License](LICENSE)。第三方客户端及其商标、安装包和服务条款归各自权利人所有；仓库不提交第三方安装包。
