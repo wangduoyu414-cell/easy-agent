@@ -4,12 +4,13 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
 use easy_agent::core::{
-    Architecture, Detection, DistributionKind, InstallPlan, MacOsInstallStrategy, OperatingSystem,
-    PackageKind, PlatformInfo, PreinstallDecision, ProductId, ReleaseCandidate, RemoteDigestPolicy,
-    TrustRegistry, WindowsPeMachine, assess_existing_install, assess_existing_install_for_product,
-    ensure_allowed_url, inspect_staged_file, run_install_batch, validate_staged_file_name,
-    verify_configured_updater_signature_file, verify_minisign_file, verify_staged_identity,
-    version_is_older, version_is_older_for_product,
+    Architecture, ArtifactSource, Detection, DistributionKind, InstallPlan, MacOsInstallStrategy,
+    OperatingSystem, PackageKind, PlatformInfo, PreinstallDecision, ProductId, ReleaseCandidate,
+    RemoteDigestPolicy, TrustRegistry, WindowsPeMachine, assess_existing_install,
+    assess_existing_install_for_product, ensure_allowed_url, ensure_allowed_url_against_rules,
+    inspect_staged_file, run_install_batch, validate_staged_file_name,
+    verify_configured_updater_signature_file, verify_minisign_bytes, verify_minisign_file,
+    verify_staged_identity, version_is_older, version_is_older_for_product,
 };
 use tempfile::tempdir;
 use url::Url;
@@ -68,6 +69,19 @@ fn embedded_registry_enables_the_configured_windows_x64_strategies() {
         )
         .unwrap();
     assert_eq!(hermes.postinstall_executable.as_deref(), Some("Hermes.exe"));
+    let claude = registry
+        .find(
+            ProductId::Claude,
+            OperatingSystem::Windows,
+            Architecture::X64,
+        )
+        .unwrap();
+    assert_eq!(claude.package_kinds.as_slice(), [PackageKind::Msix]);
+    assert_eq!(
+        claude.entry_urls.as_slice(),
+        ["https://claude.ai/api/desktop/win32/x64/msix/latest/redirect"]
+    );
+    assert!(claude.mirror_manifest_url.is_some());
     let chatgpt = registry
         .find(
             ProductId::ChatGpt,
@@ -76,17 +90,25 @@ fn embedded_registry_enables_the_configured_windows_x64_strategies() {
         )
         .unwrap();
     assert!(chatgpt.enabled);
-    assert_eq!(chatgpt.distribution, DistributionKind::DirectPackage);
+    assert_eq!(chatgpt.distribution, DistributionKind::MicrosoftStore);
     assert_eq!(
         chatgpt.entry_urls.as_slice(),
-        ["https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json"]
+        [
+            "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+            "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-x64.msix",
+            "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-License.xml"
+        ]
     );
-    assert!(chatgpt.store_id.is_none());
+    assert_eq!(chatgpt.store_id.as_deref(), Some("9PLM9XGG6VKS"));
+    assert_eq!(
+        chatgpt.web_installer_signer_subject.as_deref(),
+        Some("Microsoft Corporation")
+    );
     assert!(
         registry
             .entries
             .iter()
-            .filter(|entry| entry.enabled)
+            .filter(|entry| entry.enabled && entry.product != ProductId::ChatGpt)
             .all(|entry| entry.distribution == DistributionKind::DirectPackage)
     );
 }
@@ -98,6 +120,7 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
         for product in [
             ProductId::WorkBuddy,
             ProductId::CcSwitch,
+            ProductId::Claude,
             ProductId::ChatGpt,
         ] {
             let entry = registry
@@ -112,19 +135,6 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
                 Some(MacOsInstallStrategy::DirectAppBundle)
             );
         }
-        let product = ProductId::Claude;
-        let entry = registry
-            .find(product, OperatingSystem::MacOs, architecture)
-            .unwrap();
-        assert!(
-            !entry.enabled,
-            "{product:?}/{architecture:?} must remain gated"
-        );
-        assert!(!entry.unsupported);
-        assert_eq!(
-            entry.macos_install_strategy,
-            Some(MacOsInstallStrategy::DirectAppBundle)
-        );
     }
     assert!(matches!(
         registry.support_state(ProductId::Hermes, OperatingSystem::MacOs, Architecture::X64),
@@ -137,7 +147,7 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
             Architecture::Arm64,
         )
         .unwrap();
-    assert_eq!(chatgpt.minimum_macos_version.as_deref(), Some("14.0"));
+    assert_eq!(chatgpt.minimum_macos_version.as_deref(), Some("13.0"));
     for architecture in [Architecture::X64, Architecture::Arm64] {
         let cc_switch = registry
             .find(ProductId::CcSwitch, OperatingSystem::MacOs, architecture)
@@ -178,6 +188,9 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
             chatgpt.sparkle_ed25519_public_key.as_deref(),
             Some("mNfr1v9t63BfgDtlw4C8lRvSY6uMggIXABDOCi3tS6k=")
         );
+        assert!(chatgpt.mirror_manifest_url.is_some());
+        assert!(chatgpt.mirror_manifest_signature_url.is_some());
+        assert!(!chatgpt.mirror_url_rules.is_empty());
 
         let claude = registry
             .find(ProductId::Claude, OperatingSystem::MacOs, architecture)
@@ -187,6 +200,9 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
             Some("com.anthropic.claudefordesktop")
         );
         assert_eq!(claude.macos_team_id.as_deref(), Some("Q6L2SF6YDW"));
+        assert!(claude.mirror_manifest_url.is_some());
+        assert!(claude.mirror_manifest_signature_url.is_some());
+        assert!(!claude.mirror_url_rules.is_empty());
     }
     let hermes = registry
         .find(
@@ -383,10 +399,16 @@ fn host_and_path_must_both_match_the_embedded_contract() {
         entry,
     )
     .unwrap();
-    assert!(ensure_allowed_url(&Url::parse("http://claude.ai/bad").unwrap(), entry).is_err());
     assert!(
         ensure_allowed_url(
-            &Url::parse("https://claude.ai/unrelated/package.msix").unwrap(),
+            &Url::parse("http://claude.ai/api/desktop/win32/x64/msix/latest/redirect").unwrap(),
+            entry,
+        )
+        .is_err()
+    );
+    assert!(
+        ensure_allowed_url(
+            &Url::parse("https://claude.ai/unrelated/Claude.msix").unwrap(),
             entry
         )
         .is_err()
@@ -402,7 +424,7 @@ fn host_and_path_must_both_match_the_embedded_contract() {
 }
 
 #[test]
-fn chatgpt_allows_only_the_fixed_openai_manifest_and_release_prefix() {
+fn chatgpt_allows_only_the_fixed_microsoft_and_openai_deployment_endpoints() {
     let registry = TrustRegistry::embedded().unwrap();
     let entry = registry
         .find(
@@ -412,18 +434,59 @@ fn chatgpt_allows_only_the_fixed_openai_manifest_and_release_prefix() {
         )
         .unwrap();
     for allowed in [
-        "https://persistent.oaistatic.com/codex-app-prod/windows-store-update.json",
-        "https://persistent.oaistatic.com/codex-app-prod/releases/26.727.6591.0/ChatGPT-x64.msix",
+        "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+        "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-x64.msix",
+        "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-License.xml",
     ] {
         ensure_allowed_url(&Url::parse(allowed).unwrap(), entry).unwrap();
     }
     for rejected in [
-        "http://persistent.oaistatic.com/codex-app-prod/windows-store-update.json",
-        "https://persistent.oaistatic.com/other/ChatGPT-x64.msix",
-        "https://example.invalid/codex-app-prod/releases/26.727.6591.0/ChatGPT-x64.msix",
-        "https://get.microsoft.com/installer/download/9PLM9XGG6VKS",
+        "http://get.microsoft.com/installer/download/9PLM9XGG6VKS",
+        "https://get.microsoft.com/installer/download/OTHERPRODUCT",
+        "https://persistent.oaistatic.com/codex-app-prod/releases/26.803.10989.0/ChatGPT-x64.msix",
+        "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-arm64.msix",
     ] {
         assert!(ensure_allowed_url(&Url::parse(rejected).unwrap(), entry).is_err());
+    }
+}
+
+#[test]
+fn mirror_url_rules_do_not_expand_the_official_claude_rules() {
+    let registry = TrustRegistry::embedded().unwrap();
+    let official = registry
+        .find(
+            ProductId::Claude,
+            OperatingSystem::Windows,
+            Architecture::X64,
+        )
+        .unwrap();
+    let mirror_url = Url::parse(
+        "https://43.161.214.205/artifacts/claude/windows/x64/1.26832.0/6dc210bca31b55c9fa307d11c6b13a42c7f3a3886ccc35ca2ecb7e9fceba0139/Claude.msix",
+    )
+    .unwrap();
+    assert!(ensure_allowed_url(&mirror_url, official).is_err());
+    ensure_allowed_url_against_rules(&mirror_url, &official.mirror_url_rules).unwrap();
+    assert!(
+        ensure_allowed_url_against_rules(
+            &Url::parse("https://claude.ai/api/desktop/win32/x64/msix/latest/redirect").unwrap(),
+            &official.mirror_url_rules,
+        )
+        .is_err()
+    );
+    for rejected in [
+        "http://43.161.214.205/manifests/claude/windows/x64/latest.json",
+        "https://43.161.214.205/manifests/claude/windows/x64/other.json",
+        "https://43.161.214.205/artifacts/claude/windows/arm64/1.2.3/hash/Claude.msix",
+        "https://43.161.214.205/healthz",
+    ] {
+        assert!(
+            ensure_allowed_url_against_rules(
+                &Url::parse(rejected).unwrap(),
+                &official.mirror_url_rules,
+            )
+            .is_err(),
+            "unexpectedly allowed {rejected}"
+        );
     }
 }
 
@@ -518,7 +581,7 @@ fn installer_paths_are_passed_as_literal_process_arguments() {
 
 #[test]
 fn staged_file_name_cannot_escape_the_private_directory() {
-    assert!(validate_staged_file_name("Claude.msix").is_ok());
+    assert!(validate_staged_file_name("ClaudeSetup.exe").is_ok());
     assert!(validate_staged_file_name("..\\outside.exe").is_err());
     assert!(validate_staged_file_name("folder/client.msi").is_err());
 }
@@ -534,6 +597,8 @@ fn minisign_verification_is_enforced_and_rejects_tampering() {
     let encoded_key = base64::engine::general_purpose::STANDARD.encode(public_key_document);
     let signature = "untrusted comment: signature from minisign secret key\nRUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=\ntrusted comment: timestamp:1556193335\tfile:test\ny/rUw2y8/hOUYjZU71eHp/Wo1KZ40fGy2VJEDl34XMJM+TX48Ss/17u3IvIfbVR1FkZZSNCisQbuQY+bHwhEBg==";
     verify_minisign_file(&artifact, &encoded_key, signature).unwrap();
+    verify_minisign_bytes(b"test", &encoded_key, signature).unwrap();
+    assert!(verify_minisign_bytes(b"tampered", &encoded_key, signature).is_err());
     assert!(
         verify_configured_updater_signature_file(
             &artifact,
@@ -566,7 +631,7 @@ package_identity = "Claude"
 }
 
 #[test]
-fn enabled_store_entry_requires_fixed_store_and_app_installer_trust() {
+fn enabled_store_entry_requires_fixed_store_and_web_installer_trust() {
     let source = r#"
 schema_version = 1
 [[entries]]
@@ -576,12 +641,20 @@ architecture = "x64"
 distribution = "microsoft_store"
 enabled = true
 status_reason = "test"
-entry_urls = ["https://api.github.com/repos/microsoft/winget-cli/releases/latest"]
-url_rules = [{ host = "api.github.com", exact_paths = ["/repos/microsoft/winget-cli/releases/latest"] }]
+entry_urls = [
+  "https://get.microsoft.com/installer/download/9PLM9XGG6VKS",
+  "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-x64.msix",
+  "https://persistent.oaistatic.com/codex-app-prod/ChatGPT-License.xml"
+]
+url_rules = [
+  { host = "get.microsoft.com", exact_paths = ["/installer/download/9PLM9XGG6VKS"] },
+  { host = "persistent.oaistatic.com", exact_paths = ["/codex-app-prod/ChatGPT-x64.msix", "/codex-app-prod/ChatGPT-License.xml"] }
+]
 package_kinds = ["msix"]
 package_identity = "OpenAI.Codex"
 package_family = "OpenAI.Codex_2p2nqsd0c76g0"
 msix_publisher = "CN=fixture"
+store_id = "9PLM9XGG6VKS"
 "#;
     assert!(TrustRegistry::parse(source).is_err());
 }
@@ -623,7 +696,7 @@ allow_trusted_update_when_management_unknown = true
 }
 
 #[test]
-fn sequential_batch_reports_each_disabled_product_without_network_side_effects() {
+fn batch_reports_each_disabled_product_without_network_side_effects() {
     let registry = TrustRegistry::parse(
         r#"
 schema_version = 1
@@ -662,8 +735,12 @@ package_kinds = ["msi"]
             architecture: Architecture::X64,
             package_kind: PackageKind::Exe,
             download_url: Url::parse("https://download.codebuddy.cn/workbuddy/client.exe").unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: None,
+            expected_size: None,
             expected_sha256: None,
             detached_signature: None,
+            bootstrap_payload: None,
         }),
         InstallPlan::DirectPackage(ReleaseCandidate {
             product: ProductId::CcSwitch,
@@ -671,8 +748,12 @@ package_kinds = ["msi"]
             architecture: Architecture::X64,
             package_kind: PackageKind::Msi,
             download_url: Url::parse("https://dl.ccswitch.io/client.msi").unwrap(),
+            source: ArtifactSource::Official,
+            minimum_macos_version: None,
+            expected_size: None,
             expected_sha256: None,
             detached_signature: Some("invalid".into()),
+            bootstrap_payload: None,
         }),
     ];
     let updates = Mutex::new(Vec::new());
@@ -681,6 +762,7 @@ package_kinds = ["msi"]
         platform,
         registry,
         Arc::new(AtomicBool::new(false)),
+        |_| Ok(None),
         |update| updates.lock().unwrap().push(update),
     );
     assert_eq!(results.len(), 2);
@@ -691,7 +773,9 @@ package_kinds = ["msi"]
     );
     let updates = updates.lock().unwrap();
     assert_eq!(updates.len(), 4);
-    for (updates, result) in updates.chunks_exact(2).zip(&results) {
+    let (update_pairs, remainder) = updates.as_chunks::<2>();
+    assert!(remainder.is_empty());
+    for (updates, result) in update_pairs.iter().zip(&results) {
         assert_eq!(updates[0].product, result.product);
         assert_eq!(updates[0].state, easy_agent::core::OperationState::Ready);
         assert_eq!(updates[1].product, result.product);

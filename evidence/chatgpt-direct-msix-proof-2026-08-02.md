@@ -1,5 +1,7 @@
 # ChatGPT direct MSIX proof — 2026-08-02
 
+> Historical/superseded evidence. On 2026-08-11 the current manifest moved ahead of both direct MSIX objects (HTTP 404), while an older reachable package declared the restricted `appLicensing` capability. This proof remains valid only for the 2026-08-02 package snapshot and already-authorized local updates; it is not evidence that a new Windows computer can install ChatGPT directly. See `chatgpt-windows-store-recovery-2026-08-11.md`.
+
 ## Scope and safety
 
 - Repository: `E:\Obsidian\workspaces\ai-client-installer`

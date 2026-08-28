@@ -1,0 +1,13 @@
+[Unit]
+Description=Check ChatGPT macOS releases every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=2min
+AccuracySec=1min
+Persistent=true
+Unit=easy-agent-chatgpt-macos-sync.service
+
+[Install]
+WantedBy=timers.target

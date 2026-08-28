@@ -4,8 +4,8 @@ use std::process::ExitCode;
 
 use easy_agent::adapters::resolve_install_plan;
 use easy_agent::core::{
-    Architecture, DownloadRequest, InstallPlan, OperatingSystem, PlatformInfo, ProductId,
-    RemoteDigestPolicy, TrustRegistry, download_to_private_staging,
+    Architecture, ArtifactSource, DownloadRequest, InstallPlan, OperatingSystem, PlatformInfo,
+    ProductId, RemoteDigestPolicy, TrustRegistry, download_to_private_staging,
     verify_configured_updater_signature_file, version_is_older_for_product,
 };
 use easy_agent::platform;
@@ -91,10 +91,15 @@ fn run() -> Result<(), String> {
             product.key(),
             candidate.package_kind.extension()
         );
+        let download_url_rules = match candidate.source {
+            ArtifactSource::Official => &trust.url_rules,
+            ArtifactSource::VerifiedMirror { .. } => &trust.mirror_url_rules,
+        };
         let download = download_to_private_staging(&DownloadRequest {
             url: candidate.download_url.clone(),
             file_name,
-            trust: &trust,
+            url_rules: download_url_rules,
+            expected_size: candidate.expected_size,
         })
         .map_err(|error| format!("artifact download failed: {error}"))?;
         let remote_digest_matches = candidate

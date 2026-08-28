@@ -173,6 +173,36 @@ impl Detection {
             evidence: evidence.into(),
         }
     }
+
+    pub fn failed(error: impl Into<String>) -> Self {
+        Self {
+            installed: false,
+            version: None,
+            managed: false,
+            management_known: false,
+            package_identity: None,
+            package_family: None,
+            publisher: None,
+            architecture: None,
+            evidence: format!("检测失败：{}", error.into()),
+        }
+    }
+
+    pub fn is_failed(&self) -> bool {
+        !self.installed && !self.management_known && self.evidence.starts_with("检测失败：")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArtifactSource {
+    Official,
+    VerifiedMirror { synced_at_unix: u64 },
+}
+
+impl ArtifactSource {
+    pub const fn is_verified_mirror(&self) -> bool {
+        matches!(self, Self::VerifiedMirror { .. })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,8 +212,12 @@ pub struct ReleaseCandidate {
     pub architecture: Architecture,
     pub package_kind: PackageKind,
     pub download_url: url::Url,
+    pub source: ArtifactSource,
+    pub minimum_macos_version: Option<String>,
+    pub expected_size: Option<u64>,
     pub expected_sha256: Option<String>,
     pub detached_signature: Option<String>,
+    pub bootstrap_payload: Option<Box<ReleaseCandidate>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -239,6 +273,7 @@ pub enum OperationState {
     Ready,
     Downloading,
     Verifying,
+    Queued,
     AwaitingUserInstall,
     Installing,
     Postchecking,
@@ -254,6 +289,7 @@ impl OperationState {
             Self::Ready => "准备安装",
             Self::Downloading => "正在下载",
             Self::Verifying => "正在验证",
+            Self::Queued => "等待安装",
             Self::AwaitingUserInstall => "等待厂商安装器",
             Self::Installing => "正在安装",
             Self::Postchecking => "正在复检",

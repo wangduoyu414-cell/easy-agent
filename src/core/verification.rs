@@ -35,12 +35,7 @@ pub fn verify_minisign_file(
     encoded_public_key_file: &str,
     signature_text: &str,
 ) -> Result<(), VerificationError> {
-    let public_key_document = base64::engine::general_purpose::STANDARD
-        .decode(encoded_public_key_file.trim())
-        .map_err(|_| VerificationError::InvalidPublicKeyEncoding)?;
-    let public_key_document = String::from_utf8(public_key_document)
-        .map_err(|_| VerificationError::InvalidPublicKeyEncoding)?;
-    let public_key = PublicKey::decode(&public_key_document)?;
+    let public_key = decode_minisign_public_key(encoded_public_key_file)?;
     let signature = MinisignSignature::decode(signature_text)?;
     let mut verifier = public_key.verify_stream(&signature)?;
     let mut file = File::open(path)?;
@@ -54,6 +49,30 @@ pub fn verify_minisign_file(
     }
     verifier.finalize()?;
     Ok(())
+}
+
+pub fn verify_minisign_bytes(
+    bytes: &[u8],
+    encoded_public_key_file: &str,
+    signature_text: &str,
+) -> Result<(), VerificationError> {
+    let public_key = decode_minisign_public_key(encoded_public_key_file)?;
+    let signature = MinisignSignature::decode(signature_text)?;
+    let mut verifier = public_key.verify_stream(&signature)?;
+    verifier.update(bytes);
+    verifier.finalize()?;
+    Ok(())
+}
+
+fn decode_minisign_public_key(
+    encoded_public_key_file: &str,
+) -> Result<PublicKey, VerificationError> {
+    let public_key_document = base64::engine::general_purpose::STANDARD
+        .decode(encoded_public_key_file.trim())
+        .map_err(|_| VerificationError::InvalidPublicKeyEncoding)?;
+    let public_key_document = String::from_utf8(public_key_document)
+        .map_err(|_| VerificationError::InvalidPublicKeyEncoding)?;
+    Ok(PublicKey::decode(&public_key_document)?)
 }
 
 pub fn verify_sparkle_ed25519_file(

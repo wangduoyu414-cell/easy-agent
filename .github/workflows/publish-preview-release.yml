@@ -1,0 +1,147 @@
+name: Publish easy agent preview release
+
+on:
+  push:
+    tags:
+      - "v*-preview.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.architecture }}
+    runs-on: windows-2025
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+          components: rustfmt,clippy
+
+      - name: Cache Rust build inputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+            target
+          key: preview-windows-${{ matrix.architecture }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build and verify portable executable
+        shell: pwsh
+        run: .\packaging\build-windows.ps1 -Architecture ${{ matrix.architecture }}
+
+      - name: Upload Windows release asset
+        uses: actions/upload-artifact@v6
+        with:
+          name: preview-windows-${{ matrix.architecture }}
+          path: |
+            dist/easy-agent-windows-${{ matrix.architecture }}.exe
+            dist/SHA256SUMS-windows-${{ matrix.architecture }}.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  macos:
+    name: macOS Universal validation DMG
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+          components: rustfmt,clippy
+
+      - name: Cache Rust build inputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: preview-macos-universal-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build ad-hoc signed Universal DMG
+        env:
+          ALLOW_UNSIGNED_MACOS_BUILD: "1"
+        run: bash ./packaging/build-macos.sh
+
+      - name: Verify Universal architecture and ad-hoc signatures
+        run: |
+          lipo -info "dist/easy agent.app/Contents/MacOS/easy-agent"
+          codesign --verify --deep --strict --verbose=2 "dist/easy agent.app"
+          codesign --verify --verbose=2 "dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg"
+
+      - name: Upload macOS release asset
+        uses: actions/upload-artifact@v6
+        with:
+          name: preview-macos-universal
+          path: |
+            dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg
+            dist/SHA256SUMS-macos-universal-UNNOTARIZED-VALIDATION.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub prerelease
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified build assets
+        uses: actions/download-artifact@v6
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify expected assets and create combined checksums
+        working-directory: release-assets
+        run: |
+          test -f easy-agent-windows-x64.exe
+          test -f easy-agent-windows-arm64.exe
+          test -f easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg
+          sha256sum \
+            easy-agent-windows-x64.exe \
+            easy-agent-windows-arm64.exe \
+            easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg \
+            > SHA256SUMS.txt
+
+      - name: Publish durable preview downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: |
+            此版本用于公开测试验证，不是已签名的正式发行版。
+
+            下载文件：
+            - `easy-agent-windows-x64.exe`：Windows x64，未做 Authenticode 签名。
+            - `easy-agent-windows-arm64.exe`：Windows ARM64，未做 Authenticode 签名且仍需 ARM64 真机验收。
+            - `easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg`：Intel/Apple Silicon Universal DMG，仅做 ad-hoc 签名，未经过 Apple notarization，Gatekeeper 会阻止普通终端用户安装。
+            - `SHA256SUMS.txt`：三个主文件的 SHA-256。
+
+            核心安装链在 `e7b7eae` 上完成了干净 Windows 11 虚拟机真实安装测试；本标签会重新执行构建、静态检查和自动测试，但尚未在该标签产物上重跑完整干净机安装矩阵。macOS 与 Windows ARM64 仍需对应真机完成最终验收。不要关闭 Gatekeeper、删除 quarantine 或忽略签名警告来把验证包当作正式版使用。
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --title "easy agent $GITHUB_REF_NAME（测试预览版）" \
+            --notes "$RELEASE_NOTES"

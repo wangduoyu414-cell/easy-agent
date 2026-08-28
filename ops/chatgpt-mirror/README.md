@@ -1,0 +1,5 @@
+# ChatGPT macOS verified fallback
+
+This deployment keeps one immutable x64 ZIP and one immutable ARM64 ZIP from the pinned OpenAI Sparkle appcasts. The sync job accepts a numeric dot-separated minimum macOS version instead of pinning one permanent value, and requires that value to match the ZIP bundle's `LSMinimumSystemVersion`. It rejects redirects, downgrades, malformed minimum versions, wrong package size, wrong Bundle ID/version/architecture, or an invalid OpenAI Ed25519 signature. It then signs a narrow freshness manifest with the existing easy-agent mirror key.
+
+The client uses this path only for explicit official-network availability failures while resolving metadata or downloading the complete ZIP. A download-stage fallback must match the already confirmed official version, architecture, package kind, minimum macOS version, size, and OpenAI Sparkle signature exactly. It still enforces the manifest signature, freshness, SHA-256, Apple code signature, Team ID, Bundle ID, version, architecture, and Gatekeeper assessment.

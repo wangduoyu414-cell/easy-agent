@@ -1,0 +1,26 @@
+[Unit]
+Description=Synchronize verified Claude Windows and macOS artifacts
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=artifact-fetch
+Group=artifact-fetch
+EnvironmentFile=/etc/easy-agent-sync/sync.env
+ExecStart=/usr/local/libexec/easy-agent/sync-claude-msix
+RuntimeDirectory=easy-agent-sync
+RuntimeDirectoryMode=0750
+UMask=0027
+TimeoutStartSec=55min
+KillMode=control-group
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/easy-agent-sync /srv/easy-agent/private /run/easy-agent-sync
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

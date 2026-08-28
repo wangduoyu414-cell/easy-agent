@@ -5,7 +5,7 @@ fn main() {
         return;
     }
 
-    let mut resource = winres::WindowsResource::new();
+    let mut resource = winresource::WindowsResource::new();
     resource.set_icon("assets/branding/easy-agent.ico");
     resource.set("ProductName", "easy agent");
     resource.set("FileDescription", "easy agent");

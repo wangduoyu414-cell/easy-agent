@@ -1,7 +1,9 @@
 use regex::Regex;
 use url::Url;
 
-use crate::core::{Architecture, OperatingSystem, PackageKind, ProductId, ReleaseCandidate};
+use crate::core::{
+    Architecture, ArtifactSource, OperatingSystem, PackageKind, ProductId, ReleaseCandidate,
+};
 
 use super::AdapterError;
 
@@ -45,7 +47,11 @@ pub fn parse_hermes_homepage(
         architecture,
         package_kind,
         download_url: Url::parse(url)?,
+        source: ArtifactSource::Official,
+        minimum_macos_version: None,
+        expected_size: None,
         expected_sha256: None,
         detached_signature: None,
+        bootstrap_payload: None,
     })
 }
