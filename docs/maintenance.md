@@ -151,6 +151,6 @@ ALLOW_UNSIGNED_MACOS_BUILD=1 ./packaging/build-macos.sh
 
 ## 仓库卫生
 
-- 不提交五款第三方安装包、`.part`、临时 CDN URL、真实用户日志、证书私钥或 notary 凭据。
+- 不提交五款第三方安装包、`.part`、临时 CDN URL、真实用户日志、机器级账号/认证/Provider 审计、证书私钥或 notary 凭据。此类只读排查结果应保留在仓库外的受控证据目录，并在共享前去除机器与账号元数据。
 - `dist/` 只保留本项目生成的发行制品、checksum 和 manifest。
 - 发布前确认父级 Obsidian 知识库仍忽略该独立嵌套仓库，避免污染用户已有工作区。

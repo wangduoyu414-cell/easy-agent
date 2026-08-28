@@ -9,3 +9,5 @@ __pycache__/
 *.py[cod]
 *.log
 *.part
+/codex-ccswitch-audit-*.json
+/codex-ccswitch-audit-*.md
