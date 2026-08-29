@@ -1037,8 +1037,7 @@ fn draw_product_row(
                         },
                     ))
                     .corner_radius(7.0);
-                let mut response = ui.add_enabled(enabled, button);
-                response = response.on_hover_text(product_detail(view));
+                let response = ui.add_enabled(enabled, button);
                 if response.clicked() {
                     clicked = true;
                 }
@@ -1312,7 +1311,7 @@ fn product_install_notice(
         )
     {
         Some(
-            "将直接部署已下载并验证的 Claude 完整 MSIX，安装阶段不再联网。Windows 可能显示管理员授权；Cowork 仍可能要求启用虚拟机平台并重启。",
+            "将直接部署已下载并验证的 Claude 完整 MSIX，先完成机器级预配，再更新当前登录用户，安装阶段不再联网。Windows 可能显示管理员授权；Cowork 仍可能要求启用虚拟机平台并重启。",
         )
     } else if product == ProductId::ChatGpt
         && platform.os == OperatingSystem::Windows

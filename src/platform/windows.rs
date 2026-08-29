@@ -1102,35 +1102,97 @@ fn execute_claude_provisioned_msix(
     let outcome =
         shell_execute_elevated_wait(Path::new(&powershell), &arguments, CLAUDE_PROVISION_TIMEOUT)?;
     let receipt = fs::read_to_string(&receipt_path).ok();
-    match outcome {
+    let provision = match outcome {
         ElevatedProcessOutcome::Exited(exit_code) => {
             let error_summary = if exit_code == 0 {
-                receipt
-                    .as_deref()
-                    .filter(|value| value.trim() != "OK")
-                    .map(|value| value.trim().to_owned())
+                match receipt.as_deref().map(normalize_powershell_receipt) {
+                    Some("OK") => None,
+                    Some(value) if !value.is_empty() => Some(value.to_owned()),
+                    _ => Some("Claude 机器级 MSIX 部署未返回确认结果".into()),
+                }
             } else {
                 receipt
                     .as_deref()
                     .and_then(|value| extract_msix_error_marker("", value))
                     .or_else(|| Some("Claude 机器级 MSIX 部署未完成".into()))
             };
-            Ok(InstallerExecution {
-                exit_code: exit_code as i32,
+            InstallerExecution {
+                exit_code: if exit_code == 0 && error_summary.is_some() {
+                    1
+                } else {
+                    exit_code as i32
+                },
                 error_summary,
-            })
+            }
         }
-        ElevatedProcessOutcome::Cancelled => Ok(InstallerExecution {
+        ElevatedProcessOutcome::Cancelled => InstallerExecution {
             exit_code: ERROR_CANCELLED as i32,
             error_summary: Some("已取消 Claude 管理员授权，未部署应用包".into()),
-        }),
-        ElevatedProcessOutcome::TimedOut => Ok(InstallerExecution {
+        },
+        ElevatedProcessOutcome::TimedOut => InstallerExecution {
             exit_code: -1,
             error_summary: Some(
                 "Claude 系统部署等待超时；Windows 可能仍在后台处理，请稍后刷新状态".into(),
             ),
-        }),
+        },
+    };
+    complete_claude_install_with(provision, || execute_current_user_msix(package_path))
+}
+
+fn complete_claude_install_with(
+    provision: InstallerExecution,
+    register_current_user: impl FnOnce() -> Result<InstallerExecution, String>,
+) -> Result<InstallerExecution, String> {
+    if provision.exit_code != 0 || provision.error_summary.is_some() {
+        return Ok(provision);
     }
+    let registration = register_current_user()?;
+    if registration.exit_code == 0 && registration.error_summary.is_none() {
+        return Ok(registration);
+    }
+    let detail = registration
+        .error_summary
+        .unwrap_or_else(|| "Windows 未返回可读的当前用户注册错误".into());
+    Ok(InstallerExecution {
+        exit_code: if registration.exit_code == 0 {
+            1
+        } else {
+            registration.exit_code
+        },
+        error_summary: Some(format!(
+            "Claude 已完成机器级预配，但当前登录用户更新失败：{detail}"
+        )),
+    })
+}
+
+fn normalize_powershell_receipt(value: &str) -> &str {
+    value.trim().trim_start_matches('\u{feff}').trim()
+}
+
+fn execute_current_user_msix(package_path: &Path) -> Result<InstallerExecution, String> {
+    let plan = plan_install_command(package_path, PackageKind::Msix)?;
+    let mut command = Command::new(&plan.program);
+    hide_console_window(&mut command);
+    command.args(&plan.arguments);
+    if is_powershell_program(&plan.program) {
+        command.env_remove("PSModulePath");
+    }
+    for (key, value) in &plan.environment {
+        command.env(key, value);
+    }
+    let output = command
+        .output()
+        .map_err(|error| format!("cannot start current-user MSIX registration: {error}"))?;
+    let exit_code = output.status.code().unwrap_or(-1);
+    let error_summary = if output.status.success() {
+        None
+    } else {
+        summarize_installer_error(&output.stdout, &output.stderr)
+    };
+    Ok(InstallerExecution {
+        exit_code,
+        error_summary,
+    })
 }
 
 fn powershell_literal_path(path: &Path, label: &str) -> Result<String, String> {
@@ -1307,6 +1369,10 @@ pub fn execute_verified_installer(
         None
     };
 
+    if request.kind == PackageKind::Msix {
+        return execute_current_user_msix(request.path);
+    }
+
     let plan = plan_install_command_with_payload(request.path, request.kind, payload_path)?;
     let mut command = Command::new(&plan.program);
     hide_console_window(&mut command);
@@ -1317,24 +1383,11 @@ pub fn execute_verified_installer(
     for (key, value) in &plan.environment {
         command.env(key, value);
     }
-    let (exit_code, error_summary) = if request.kind == PackageKind::Msix {
-        let output = command
-            .output()
-            .map_err(|error| format!("cannot start installer: {error}"))?;
-        let exit_code = output.status.code().unwrap_or(-1);
-        let error_summary = if output.status.success() {
-            None
-        } else {
-            summarize_installer_error(&output.stdout, &output.stderr)
-        };
-        (exit_code, error_summary)
-    } else {
-        let status = command
-            .status()
-            .map_err(|error| format!("cannot start installer: {error}"))?;
-        let exit_code = status.code().unwrap_or(-1);
-        (exit_code, known_installer_error(request.kind, exit_code))
-    };
+    let status = command
+        .status()
+        .map_err(|error| format!("cannot start installer: {error}"))?;
+    let exit_code = status.code().unwrap_or(-1);
+    let error_summary = known_installer_error(request.kind, exit_code);
     Ok(InstallerExecution {
         exit_code,
         error_summary,
@@ -1537,10 +1590,11 @@ mod tests {
     use base64::Engine;
 
     use super::{
-        CLAUDE_PROVISION_SCRIPT_TEMPLATE, DETECTION_SCRIPT, INSTALL_MSIX_SCRIPT,
-        RegistryEntryOutput, certificate_subject_contains, detect_hermes_fixed_install_at_with,
-        detect_product, encode_powershell, expected_executable_machine, extract_msix_error_marker,
-        hide_console_window, known_installer_error, matches_registry_entry,
+        CLAUDE_PROVISION_SCRIPT_TEMPLATE, DETECTION_SCRIPT, ERROR_CANCELLED, INSTALL_MSIX_SCRIPT,
+        RegistryEntryOutput, certificate_subject_contains, complete_claude_install_with,
+        detect_hermes_fixed_install_at_with, detect_product, encode_powershell,
+        expected_executable_machine, extract_msix_error_marker, hide_console_window,
+        known_installer_error, matches_registry_entry, normalize_powershell_receipt,
         parse_msi_template_architecture, powershell_literal_path, select_registry_detection,
         summarize_installer_error, trusted_msiexec_program, trusted_powershell_program,
         verify_artifact,
@@ -1548,6 +1602,7 @@ mod tests {
     use crate::core::{
         Architecture, OperatingSystem, PackageKind, ProductId, TrustRegistry, WindowsPeMachine,
     };
+    use crate::platform::InstallerExecution;
 
     fn write_minimal_pe(path: &Path, machine: u16) {
         let mut bytes = vec![0_u8; 70];
@@ -1680,6 +1735,69 @@ mod tests {
         assert!(script.contains(r"C:\Temp\easy agent\Claude.msix"));
         assert!(!script.contains("http://"));
         assert!(!script.contains("https://"));
+    }
+
+    #[test]
+    fn claude_machine_provision_is_followed_by_current_user_registration() {
+        let provision = InstallerExecution {
+            exit_code: 0,
+            error_summary: None,
+        };
+        let mut registration_called = false;
+        let result = complete_claude_install_with(provision, || {
+            registration_called = true;
+            Ok(InstallerExecution {
+                exit_code: 0,
+                error_summary: None,
+            })
+        })
+        .unwrap();
+        assert!(registration_called);
+        assert_eq!(result.exit_code, 0);
+        assert!(result.error_summary.is_none());
+    }
+
+    #[test]
+    fn claude_machine_provision_accepts_a_utf8_bom_receipt() {
+        assert_eq!(normalize_powershell_receipt("\u{feff}OK\r\n"), "OK");
+    }
+
+    #[test]
+    fn claude_current_user_registration_failure_is_not_reported_as_success() {
+        let provision = InstallerExecution {
+            exit_code: 0,
+            error_summary: None,
+        };
+        let result = complete_claude_install_with(provision, || {
+            Ok(InstallerExecution {
+                exit_code: 1,
+                error_summary: Some("0x80073D02 package resources are in use".into()),
+            })
+        })
+        .unwrap();
+        assert_eq!(result.exit_code, 1);
+        assert!(
+            result
+                .error_summary
+                .as_deref()
+                .is_some_and(|message| message.contains("当前登录用户更新失败"))
+        );
+    }
+
+    #[test]
+    fn claude_failed_machine_provision_does_not_touch_the_current_user() {
+        let provision = InstallerExecution {
+            exit_code: ERROR_CANCELLED as i32,
+            error_summary: Some("已取消 Claude 管理员授权，未部署应用包".into()),
+        };
+        let mut registration_called = false;
+        let result = complete_claude_install_with(provision, || {
+            registration_called = true;
+            unreachable!()
+        })
+        .unwrap();
+        assert!(!registration_called);
+        assert_eq!(result.exit_code, ERROR_CANCELLED as i32);
     }
 
     #[test]

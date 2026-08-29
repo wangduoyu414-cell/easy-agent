@@ -6,7 +6,7 @@
 
 | 目标 | 推荐路径 | 何时使用 |
 | --- | --- | --- |
-| 下载公开测试包 | [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动；EXE 未签名。未公证 DMG 只用于受控验证。 |
+| 下载公开测试包 | [`v0.1.0-preview.3`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.3) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动，并完成 Claude 当前用户更新回归复检；EXE 未签名。未公证 DMG 只用于受控验证。 |
 | 日常使用 | 将来的 GitHub Release 已签名制品 | 仅当 Release 说明同时给出版本、SHA-256 和签名/公证状态时。 |
 | 评估当前代码 | `cargo run --release` | 开发者在受控本机直接运行。 |
 | 验证 Windows 包 | `packaging/build-windows.ps1` | 需要一个带 Windows 资源图标的便携 EXE。 |
@@ -14,7 +14,7 @@
 
 不要使用未知镜像、第三方“加速下载”、`curl | sh`、关闭 Gatekeeper 或删除 quarantine。应用界面只显示版本与状态，实际入口、下载节点、镜像时效和签名身份由内置策略固定校验并写入脱敏日志，不需要用户自行判断渠道。安全验证失败时，停止并检查证据，而不是寻找绕过方式。
 
-Claude Windows 当前直接使用 Anthropic 官方完整 MSIX。`easy agent` 会先完成摘要、AppX 签名、Publisher、Package Identity、架构和版本验证，再请求管理员权限执行本地机器级部署；不会启动 Claude Setup，也不会在安装阶段再次下载约 253 MB 的组件。部署结束后仍复检固定 Package 身份、架构和版本，不会只凭退出码报告成功。Cowork 可能还要求启用 Windows 虚拟机平台并重启。Claude 登录和实际使用仍取决于本机网络与 Anthropic 的服务地区要求。
+Claude Windows 当前直接使用 Anthropic 官方完整 MSIX。`easy agent` 会先完成摘要、AppX 签名、Publisher、Package Identity、架构和版本验证，再请求管理员权限执行本地机器级预配，随后在原登录用户上下文注册或更新同一个已验证包；不会启动 Claude Setup，也不会在安装阶段再次下载约 253 MB 的组件。这样既保留机器级部署，也避免只更新系统预配记录而让当前用户继续停留在旧版本。两个阶段结束后仍复检固定 Package 身份、架构和版本，不会只凭退出码报告成功。Cowork 可能还要求启用 Windows 虚拟机平台并重启。Claude 登录和实际使用仍取决于本机网络与 Anthropic 的服务地区要求。
 
 可以连续操作多个客户端：不同厂商的 EXE 安装器和 macOS 应用复制可以直接同时进行；只有两个任务同时使用同一种 Windows 系统安装引擎时才短暂排队（MSI 只等 MSI，MSIX/Store 只等 MSIX/Store）。MSI 与 Store 互不阻塞。每个产品都可以单独取消，某一项失败不会中断其他项。
 

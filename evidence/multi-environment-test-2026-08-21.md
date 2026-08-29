@@ -186,6 +186,16 @@ All results below used easy-agent's production `resolve_install_plan` and `run_i
 
 Account-bound validation remains pending for actual model responses and third-party messaging delivery because no model-provider account/API key or messaging credentials were supplied. This does not affect installation, version detection, local backend health, page rendering, or the validated bundled tools.
 
+## 2026-08-28 Claude Windows update regression and fix
+
+- Observed behavior: Claude's verified MSIX deployment returned success, but postcheck continued to see the current user's older AppX version and ended in `ResultUnknown`. A reported case remained on `1.30096.1.0` while the verified target was `1.40609.0`.
+- Root cause: the Claude-specific path only ran `Add-AppxProvisionedPackage -Online`. Machine provisioning updates the system package provision for future users but does not reliably update an already registered package for the current logged-in user.
+- Fix: after successful machine provisioning, easy-agent now runs `Add-AppxPackage -Path ... -ForceTargetApplicationShutdown` in the original logged-in user context against the same private, verified MSIX. A failed or cancelled machine provision does not start the user registration stage; a failed user registration is reported as a hard installation failure rather than a successful exit followed by an ambiguous postcheck.
+- Receipt correction: the elevated PowerShell receipt can contain a UTF-8 BOM (`U+FEFF`). The result parser now normalizes that marker before requiring the exact `OK` receipt, while a missing or invalid receipt is no longer accepted as success.
+- Real host validation: the repaired production execution path updated Claude from `1.37937.1.0` to `1.40609.0.0`. Both `Get-AppxPackage -Name Claude` for the current user and `Get-AppxProvisionedPackage -Online` reported `Claude_1.40609.0.0_x64__pzs8sxrjxfjjc`; execution returned exit code 0 and the project detector confirmed the fixed identity, publisher, x64 architecture, and target version.
+- UI correction: the product subtitle remains the single full-detail hover target; the action button no longer opens a second copy of the same tooltip over adjacent rows.
+- Progress correction: core downloads now coalesce progress callbacks to approximately 1 MiB increments while preserving the initial and final events. This prevents the small network reads observed during the 251.3 MiB Claude download from generating thousands of redundant UI updates.
+
 ## Passed checks so far
 
 - `cargo fmt --all -- --check`

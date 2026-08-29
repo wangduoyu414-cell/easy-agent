@@ -8,9 +8,11 @@
 
 - `easy agent` 已实现 Windows x64/ARM64 与 macOS Intel/Apple Silicon 平台模型，以及下载、验证、安装、取消、复检、回滚和脱敏日志链路。
 - Windows x64 已在干净 Windows 11 虚拟机中通过五款客户端的真实首次安装、安装后复检和独立启动；Windows 10 已通过 CC Switch 的真实安装与复检。
+- Claude Windows 完整 MSIX 采用两阶段部署：管理员上下文完成机器级预配，随后在原登录用户上下文注册或更新同一已验证包，避免机器预配成功但当前用户仍保留旧版本。
+- 下载进度按约 1 MiB 增量合并，并保证起点和完成点仍会通知，避免小块网络读取触发数千次界面刷新和日志/测试输出。
 - Windows ARM64 当前只启用 Claude 和 ChatGPT。EXE 构建、PE 架构、图标和版本资源已通过检查，但仍缺少 ARM64 真机安装矩阵。
 - macOS Intel/Apple Silicon 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT 的直接应用包链。Hermes Intel 明确不支持；Hermes Apple Silicon 只识别 vendor bootstrap，当前禁用。
-- Release `v0.1.0-preview.2` 与当前主分支的运行代码、信任配置和打包逻辑一致；后续差异只涉及仓库清理和文档维护。
+- Release `v0.1.0-preview.3` 对应当前主分支的运行代码、信任配置和打包逻辑，包含 Claude 当前用户更新、PowerShell 回执和下载进度合并修复。
 - 当前 Windows EXE 未做 Authenticode 签名，macOS DMG 未做 Developer ID 签名和 Apple 公证，因此仍属于验证产物。
 
 ## 平台支持矩阵

@@ -30,14 +30,14 @@
 
 ## 下载与安装
 
-当前版本为 [`v0.1.0-preview.2`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.2)：
+当前版本为 [`v0.1.0-preview.3`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.3)：
 
 | 系统 | 下载 | 已验证范围与限制 |
 | --- | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中五款客户端的真实首次安装、复检和独立启动均已通过；EXE 未签名。 |
-| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
-| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，只用于受控验证；仍需 Apple Silicon 真机验收。 |
-| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.2/SHA256SUMS.txt) | 运行前核对文件摘要。 |
+| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.3/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中五款客户端的真实首次安装、复检和独立启动均已通过；Claude 当前用户更新修复已完成真实 Windows 复检，EXE 未签名。 |
+| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.3/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
+| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.3/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包未公证，只用于受控验证；仍需 Apple Silicon 真机验收。 |
+| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.3/SHA256SUMS.txt) | 运行前核对文件摘要。 |
 
 完整步骤、环境要求和排错见 [安装指南](docs/installation.md)。所有版本见 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 

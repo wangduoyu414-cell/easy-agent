@@ -22,6 +22,7 @@ use super::{
 const MAX_INSTALLER_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
 const MAX_DOWNLOAD_ATTEMPTS: usize = 3;
+const MIN_PROGRESS_INCREMENT: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct DownloadRequest<'a> {
@@ -355,6 +356,7 @@ fn download_attempt(
     let mut received = plan.initial_length;
     let mut body_received = 0_u64;
     (control.on_progress)(received, plan.expected_total);
+    let mut last_progress = received;
     let mut buffer = [0_u8; 128 * 1024];
     loop {
         if (control.is_cancelled)() {
@@ -392,7 +394,10 @@ fn download_attempt(
             });
         }
         output.write_all(&buffer[..read])?;
-        (control.on_progress)(received, plan.expected_total);
+        if should_emit_download_progress(last_progress, received, plan.expected_total) {
+            (control.on_progress)(received, plan.expected_total);
+            last_progress = received;
+        }
     }
     if let Some(expected) = plan.expected_body_length
         && body_received != expected
@@ -410,8 +415,20 @@ fn download_attempt(
             actual: received,
         });
     }
+    if received != last_progress {
+        (control.on_progress)(received, plan.expected_total);
+    }
     output.sync_all()?;
     Ok(final_url)
+}
+
+fn should_emit_download_progress(
+    last_progress: u64,
+    received: u64,
+    expected_total: Option<u64>,
+) -> bool {
+    received.saturating_sub(last_progress) >= MIN_PROGRESS_INCREMENT
+        || expected_total.is_some_and(|expected| received >= expected)
 }
 
 fn send_with_redirects(
@@ -643,7 +660,7 @@ mod tests {
     use super::{
         DownloadError, DownloadResult, download_error_allows_verified_fallback,
         inspect_staged_file, looks_like_certificate_failure, parse_content_range,
-        save_verified_download_copy,
+        save_verified_download_copy, should_emit_download_progress,
     };
 
     #[test]
@@ -662,6 +679,25 @@ mod tests {
         ] {
             assert_eq!(parse_content_range(invalid), None, "{invalid}");
         }
+    }
+
+    #[test]
+    fn download_progress_is_coalesced_but_always_reports_completion() {
+        assert!(!should_emit_download_progress(
+            0,
+            512 * 1024,
+            Some(10 * 1024 * 1024)
+        ));
+        assert!(should_emit_download_progress(
+            0,
+            1024 * 1024,
+            Some(10 * 1024 * 1024)
+        ));
+        assert!(should_emit_download_progress(
+            9 * 1024 * 1024 + 768 * 1024,
+            10 * 1024 * 1024,
+            Some(10 * 1024 * 1024)
+        ));
     }
 
     #[test]
