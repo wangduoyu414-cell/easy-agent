@@ -17,7 +17,7 @@
 - Hermes Mac 正式扫描与详情已接入只读观察。官方正式版固定源码已在 M1 上完成锁定依赖、ARM64 桌面构建、真实后端健康和同机前后端认证联调；这是自建测试样本，官方 DMG 一键安装仍未闭合。详见[固定源码与真实运行验证](../evidence/hermes-fixed-source-runtime-2026-09-06.md)。
 - Apple M1 上已通过原生测试、双架构编译、Universal 打包和 `easy agent` 界面启动；WorkBuddy 两种 Mac 架构已完成当前官方包身份迁移修复和临时安装、重复替换、失败回滚验证。
 - CC Switch 3.20.1、ChatGPT 26.901.41600、Claude 1.46388.4 在 M1 上的当前 ARM64 制品已通过临时首次安装、同版本重复替换、失败回滚和清理；尚不能据此宣称旧版升级或客户端独立启动通过。
-- 已发布的 Release `v0.1.0-preview.3` 包含 Claude 当前用户更新、PowerShell 回执和下载进度合并修复。本次 Apple Silicon 构建配置变更尚未发布。
+- 已发布的 Release `v0.1.0-preview.3` 包含 Claude 当前用户更新、PowerShell 回执和下载进度合并修复。Apple Silicon 构建配置、WorkBuddy 身份修复和 Hermes 诊断纳入 `v0.1.0-preview.4`，对应标签工作流重新构建全部安装包。
 - 当前 Windows EXE 未做 Authenticode 签名，macOS DMG 未做 Developer ID 签名和 Apple 公证，因此仍属于验证产物。
 
 ## 平台支持矩阵

@@ -57,7 +57,7 @@ jobs:
 
   macos:
     name: macOS Universal validation DMG
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Check out tagged source
@@ -77,7 +77,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: preview-macos-universal-${{ hashFiles('Cargo.lock') }}
+          key: preview-macos-universal-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'packaging/build-macos.sh', 'packaging/macos/Info.plist') }}
 
       - name: Build ad-hoc signed Universal DMG
         env:
@@ -131,11 +131,11 @@ jobs:
           RELEASE_NOTES: |
             此版本用于公开测试验证，不是已签名的正式发行版。
 
-            本次修复：
-            - Claude Windows 在机器级预配后，会继续更新当前登录用户，不再因当前用户仍保留旧版而显示“待复检”。
-            - 修正带 UTF-8 BOM 的 PowerShell 部署回执解析。
-            - 合并过密的下载进度通知，避免数千次无效界面刷新。
-            - 移除产品状态和操作按钮重复显示的同一悬浮提示。
+            本次改进：
+            - 修复 WorkBuddy macOS 官方包 Bundle ID 迁移；旧身份仅用于识别同 Team 的已安装应用，新下载和安装后复检仍严格固定当前身份。
+            - 增加 Hermes Mac 安装布局、桌面签名完整性和绑定后端进程的只读诊断；官方 bootstrap 仍未固定稳定版本，安装入口保持禁用。
+            - 固定依赖解析及 macOS 最低部署版本；此 Universal DMG 在 Apple Silicon runner 上构建，包含 arm64 和 x86_64。
+            - 补充 M1 真机、官方安装来源与 Hermes 固定源码真实联调证据。
 
             下载文件：
             - `easy-agent-windows-x64.exe`：Windows x64，未做 Authenticode 签名。
@@ -143,7 +143,7 @@ jobs:
             - `easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg`：Intel/Apple Silicon Universal DMG，仅做 ad-hoc 签名，未经过 Apple notarization，Gatekeeper 会阻止普通终端用户安装。
             - `SHA256SUMS.txt`：三个主文件的 SHA-256。
 
-            Windows x64 五款客户端已在干净 Windows 11 虚拟机完成真实首次安装、复检和独立启动；本次 Claude 更新修复已在真实 Windows 主机把当前用户和系统预配版本同时更新到目标版本。此标签会重新执行构建、静态检查和自动测试，但尚未重跑五款产品的完整更新/异常矩阵。macOS 与 Windows ARM64 仍需对应真机完成最终验收。不要关闭 Gatekeeper、删除 quarantine 或忽略签名警告来把验证包当作正式版使用。
+            Windows x64 五款客户端有历史干净机首次安装、复检和独立启动证据；本次标签重新构建两个 Windows 架构，但不代表重新完成全部客户端真实安装/更新。M1 已完成安装助手运行和四款直接应用包的临时安装验证；Hermes 固定源码样本已完成真实前后端认证联调，但不是官方一键安装验收。Windows ARM64、客户端完整更新/异常/账号业务矩阵仍待验证。验证包未正式签名、公证，请勿通过关闭 Gatekeeper 或删除 quarantine 将其作为正式版使用。
         run: |
           gh release create "$GITHUB_REF_NAME" release-assets/* \
             --repo "$GITHUB_REPOSITORY" \

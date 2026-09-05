@@ -6,7 +6,7 @@
 
 | 目标 | 推荐路径 | 何时使用 |
 | --- | --- | --- |
-| 下载公开测试包 | [`v0.1.0-preview.3`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.3) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动，并完成 Claude 当前用户更新回归复检；EXE 未签名。未公证 DMG 只用于受控验证。 |
+| 下载公开测试包 | [`v0.1.0-preview.4`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.4) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动，并完成 Claude 当前用户更新回归复检；EXE 未签名。未公证 DMG 只用于受控验证。 |
 | 日常使用 | 将来的 GitHub Release 已签名制品 | 仅当 Release 说明同时给出版本、SHA-256 和签名/公证状态时。 |
 | 评估当前代码 | `cargo run --release` | 开发者在受控本机直接运行。 |
 | 验证 Windows 包 | `packaging/build-windows.ps1` | 需要一个带 Windows 资源图标的便携 EXE。 |
