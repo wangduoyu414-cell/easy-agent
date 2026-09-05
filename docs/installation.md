@@ -102,10 +102,38 @@ cargo install cargo-xwin --locked
 
 ## 构建 macOS Universal DMG
 
+### Apple Silicon 本地开发
+
+安装 Xcode Command Line Tools 和原生 ARM64 Rustup 后，在项目目录运行：
+
+```bash
+export PATH="$HOME/.cargo/bin:$PATH"
+export MACOSX_DEPLOYMENT_TARGET="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' packaging/macos/Info.plist)"
+# 源码位于 SMB/网络盘时，将编译缓存放在本机磁盘。
+export CARGO_TARGET_DIR="$HOME/Library/Caches/easy-agent/target"
+rustup show
+cargo fmt --all -- --check
+cargo test --locked --all-targets
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo run --locked --target aarch64-apple-darwin
+```
+
+`rust-toolchain.toml` 固定 Rust 版本；首次运行 Rustup/Cargo 时会下载所需工具链。日常调试使用原生 ARM64，发行时再构建 Universal 包。`build-macos.sh` 会从 `Info.plist` 读取最低系统版本并设置 `MACOSX_DEPLOYMENT_TARGET`，两个架构共用该版本，且使用 `--locked` 固定依赖解析。
+
+macOS 验证工作流分别在 `macos-15-intel` 与 ARM64 `macos-15` 上执行测试、Clippy 和 Universal 构建，按 runner 架构隔离缓存及制品名称。CI 成功仍不等价于四款客户端在 Apple Silicon 上的真实安装、更新和独立启动验收。
+
 ### 内部/CI 验证包
 
 ```bash
 ALLOW_UNSIGNED_MACOS_BUILD=1 ./packaging/build-macos.sh
+```
+
+网络盘源码建议同时将打包中间文件与制品放在本机磁盘：
+
+```bash
+EASY_AGENT_MACOS_BUILD_ROOT="$HOME/Library/Caches/easy-agent/target" \
+EASY_AGENT_DIST_DIR="$HOME/Library/Caches/easy-agent/dist" \
+ALLOW_UNSIGNED_MACOS_BUILD=1 bash ./packaging/build-macos.sh
 ```
 
 脚本会构建 `x86_64-apple-darwin` 与 `aarch64-apple-darwin`、合并为 Universal 可执行文件、复制 `easy agent.icns`、执行 ad-hoc codesign，并在 DMG 中同时放入 `easy agent.app` 与指向系统 Applications 的拖拽入口，然后输出：

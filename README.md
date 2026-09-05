@@ -81,6 +81,8 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 
 已知使用限制：
 
+- 2026-09-06 已修复 WorkBuddy 两种 Mac 架构的 Bundle ID 迁移，并验证当前官方包的临时安装与回滚。Hermes Mac 安装器默认追踪 main，缺少固定稳定版本与最终应用复检，继续禁用。Windows 当前包检查与关联影响见 [安装来源审计](evidence/distribution-source-audit-2026-09-06.md)。
+- Hermes 官方正式版固定源码已在 M1 上构建并完成真实桌面/后端联调；该自建测试样本不替代官方签名安装器的验证，见[真实运行证据](evidence/hermes-fixed-source-runtime-2026-09-06.md)。
 - 图形界面需要 OpenGL 2.0 或更高版本；缺少可用图形驱动的旧电脑或受限虚拟机可能无法启动。
 - Microsoft 没有提供稳定、可直接比较的 ChatGPT Windows“最新版本号”；已安装最新版时仍可能显示“更新”，该按钮表示让微软检查并安装可用版本。
 - Hermes Windows 安装器会自动准备 Node、Python、Git 等依赖，无需预装；干净环境建议约 5 GB 可用内存、数 GB 磁盘空间，并预留约 30 分钟。

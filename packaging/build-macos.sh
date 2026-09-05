@@ -36,17 +36,20 @@ if [[ "$unsigned_build" != "1" ]]; then
 fi
 
 cd "$repo_root"
+# Compile both slices for the same minimum OS declared by the app bundle.
+MACOSX_DEPLOYMENT_TARGET="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' packaging/macos/Info.plist)"
+export MACOSX_DEPLOYMENT_TARGET
 version="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
 if [[ -z "$version" ]]; then
   echo "Could not read the Cargo package version." >&2
   exit 1
 fi
 rustup target add x86_64-apple-darwin aarch64-apple-darwin
-CARGO_TARGET_DIR="$build_root" cargo test --all-targets
-CARGO_TARGET_DIR="$build_root" cargo clippy --all-targets --all-features -- -D warnings
+CARGO_TARGET_DIR="$build_root" cargo test --locked --all-targets
+CARGO_TARGET_DIR="$build_root" cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
-CARGO_TARGET_DIR="$build_root" cargo build --release --target x86_64-apple-darwin
-CARGO_TARGET_DIR="$build_root" cargo build --release --target aarch64-apple-darwin
+CARGO_TARGET_DIR="$build_root" cargo build --locked --release --target x86_64-apple-darwin
+CARGO_TARGET_DIR="$build_root" cargo build --locked --release --target aarch64-apple-darwin
 
 mkdir -p "$dist_dir"
 if [[ -e "$bundle_dir" ]]; then

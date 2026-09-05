@@ -1,3 +1,5 @@
+pub mod hermes;
+pub mod hermes_health;
 #[cfg(any(target_os = "macos", test))]
 #[cfg_attr(all(test, not(target_os = "macos")), allow(dead_code))]
 mod macos;

@@ -167,7 +167,7 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
         );
         assert_eq!(
             workbuddy.macos_bundle_id.as_deref(),
-            Some("com.workbuddy.workbuddy")
+            Some("com.tencent.workbuddy.mac")
         );
         assert_eq!(workbuddy.macos_team_id.as_deref(), Some("FN2V63AD2J"));
         assert_eq!(
@@ -291,6 +291,14 @@ minimum_macos_version = "14.0"
 
 #[test]
 fn platform_signature_only_digest_policy_is_limited_to_workbuddy_macos_identity() {
+    let embedded = include_str!("../config/trust-registry.toml");
+    assert!(TrustRegistry::parse(embedded).is_ok());
+    for replacement in ["com.workbuddy.workbuddy", "com.tencent.other"] {
+        assert!(
+            TrustRegistry::parse(&embedded.replace("com.tencent.workbuddy.mac", replacement))
+                .is_err()
+        );
+    }
     let source = r#"
 schema_version = 1
 [[entries]]

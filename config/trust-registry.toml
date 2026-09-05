@@ -211,7 +211,7 @@ package_kinds = ["zip"]
 remote_digest_policy = "platform_signature_only"
 macos_install_strategy = "direct_app_bundle"
 macos_application_name = "WorkBuddy.app"
-macos_bundle_id = "com.workbuddy.workbuddy"
+macos_bundle_id = "com.tencent.workbuddy.mac"
 macos_team_id = "FN2V63AD2J"
 minimum_macos_version = "12.0"
 
@@ -230,7 +230,7 @@ package_kinds = ["zip"]
 remote_digest_policy = "platform_signature_only"
 macos_install_strategy = "direct_app_bundle"
 macos_application_name = "WorkBuddy.app"
-macos_bundle_id = "com.workbuddy.workbuddy"
+macos_bundle_id = "com.tencent.workbuddy.mac"
 macos_team_id = "FN2V63AD2J"
 minimum_macos_version = "12.0"
 
@@ -250,7 +250,7 @@ product = "hermes"
 os = "macos"
 architecture = "arm64"
 enabled = false
-status_reason = "官方 Apple Silicon DMG 的应用名、setup Bundle ID、Developer Team ID、codesign 与 Gatekeeper 已固定；bootstrap 最终桌面/runtime 行为和真机安装复检待完成"
+status_reason = "官方安装器默认跟随 main，未固定稳定版本；setup 签名已验证，最终桌面/runtime 的安装与复检尚未实现"
 entry_urls = ["https://hermes-agent.nousresearch.com/"]
 url_rules = [
   { host = "hermes-agent.nousresearch.com", exact_paths = ["/"] },

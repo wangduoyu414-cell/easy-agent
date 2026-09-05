@@ -1116,7 +1116,7 @@ fn product_subtitle(
             }
         }
         None => match &view.support {
-            SupportState::Disabled(_) => disabled_product_summary(view.product).into(),
+            SupportState::Disabled(reason) => disabled_product_summary(view.product, reason).into(),
             SupportState::Unsupported(_) => "当前系统或芯片不受官方支持".into(),
             SupportState::Ready => {
                 if let Some(reason) = product_resolution_failure_summary(view) {
@@ -1216,6 +1216,9 @@ fn resolve_product_plan(
 
 fn product_detail(view: &ProductView) -> String {
     match &view.support {
+        SupportState::Disabled(reason) if view.product == ProductId::Hermes => {
+            format!("{}\n{}", view.detection.evidence, reason)
+        }
         SupportState::Disabled(reason) | SupportState::Unsupported(reason) => reason.clone(),
         SupportState::Ready if view.detection.is_failed() => view.status_line.clone(),
         SupportState::Ready => product_resolution_failure_summary(view)
@@ -1266,9 +1269,12 @@ fn product_resolution_failure_summary(view: &ProductView) -> Option<&'static str
     }
 }
 
-fn disabled_product_summary(product: ProductId) -> &'static str {
+fn disabled_product_summary(product: ProductId, reason: &str) -> &'static str {
     match product {
         ProductId::Claude => "当前暂不可用",
+        ProductId::Hermes if reason.contains("未固定稳定版本") => {
+            "安装源未固定稳定版本，暂不可用"
+        }
         ProductId::Hermes => "官方安装流程暂未完成验证",
         _ => "当前版本暂未完成安全验证",
     }
@@ -1809,6 +1815,12 @@ mod tests {
         );
         view.status_line = "未检测到安装 · fixture · 版本解析：official source unavailable (server returned HTTP 403); verified mirror unavailable (server returned HTTP 503)".into();
         assert_eq!(product_subtitle(&view, false, None), "最新版本暂时不可用");
+        view.product = ProductId::Hermes;
+        view.support = SupportState::Disabled("安装源未固定稳定版本".into());
+        view.detection = Detection::absent("仅发现 Hermes 安装器，桌面尚未安装");
+        assert!(product_detail(&view).contains("仅发现 Hermes 安装器"));
+        assert!(product_detail(&view).contains("安装源未固定稳定版本"));
+        assert_eq!(product_action(&view, false), ("暂不可用", false));
     }
 
     #[test]

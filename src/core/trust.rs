@@ -483,7 +483,7 @@ impl TrustRegistry {
                     || entry.distribution != DistributionKind::DirectPackage
                     || entry.package_kinds.as_slice() != [PackageKind::Zip]
                     || entry.macos_install_strategy != Some(MacOsInstallStrategy::DirectAppBundle)
-                    || entry.macos_bundle_id.as_deref() != Some("com.workbuddy.workbuddy")
+                    || entry.macos_bundle_id.as_deref() != Some("com.tencent.workbuddy.mac")
                     || entry.macos_team_id.as_deref() != Some("FN2V63AD2J"))
             {
                 return Err(TrustRegistryError::Invalid(

@@ -1,6 +1,6 @@
 # 实现与验证状态
 
-更新时间：2026-08-28
+更新时间：2026-09-06
 
 本页只记录当前有效状态。历史问题、原始版本观察和逐步测试过程保留在 [`evidence/`](../evidence/) 中，不再与当前结论混写。
 
@@ -12,7 +12,12 @@
 - 下载进度按约 1 MiB 增量合并，并保证起点和完成点仍会通知，避免小块网络读取触发数千次界面刷新和日志/测试输出。
 - Windows ARM64 当前只启用 Claude 和 ChatGPT。EXE 构建、PE 架构、图标和版本资源已通过检查，但仍缺少 ARM64 真机安装矩阵。
 - macOS Intel/Apple Silicon 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT 的直接应用包链。Hermes Intel 明确不支持；Hermes Apple Silicon 只识别 vendor bootstrap，当前禁用。
-- Release `v0.1.0-preview.3` 对应当前主分支的运行代码、信任配置和打包逻辑，包含 Claude 当前用户更新、PowerShell 回执和下载进度合并修复。
+- Hermes 新增 Windows/macOS 共用的[只读安装诊断](hermes-diagnostics.md)，观察布局、声明版本、Git HEAD 和安装标记一致性。该工具尚不用于 GUI 安装成功判定，不验证运行健康或源码完整性。
+- Mac 另有最终桌面 Bundle/ARM64/codesign 诊断，以及绑定实际 Python 进程、工作目录、端口和版本的后端存活探针。它们仍是独立诊断入口，不证明厂商来源、模型访问或整体安装成功；Windows 对应系统检查待实现。
+- Hermes Mac 正式扫描与详情已接入只读观察。官方正式版固定源码已在 M1 上完成锁定依赖、ARM64 桌面构建、真实后端健康和同机前后端认证联调；这是自建测试样本，官方 DMG 一键安装仍未闭合。详见[固定源码与真实运行验证](../evidence/hermes-fixed-source-runtime-2026-09-06.md)。
+- Apple M1 上已通过原生测试、双架构编译、Universal 打包和 `easy agent` 界面启动；WorkBuddy 两种 Mac 架构已完成当前官方包身份迁移修复和临时安装、重复替换、失败回滚验证。
+- CC Switch 3.20.1、ChatGPT 26.901.41600、Claude 1.46388.4 在 M1 上的当前 ARM64 制品已通过临时首次安装、同版本重复替换、失败回滚和清理；尚不能据此宣称旧版升级或客户端独立启动通过。
+- 已发布的 Release `v0.1.0-preview.3` 包含 Claude 当前用户更新、PowerShell 回执和下载进度合并修复。本次 Apple Silicon 构建配置变更尚未发布。
 - 当前 Windows EXE 未做 Authenticode 签名，macOS DMG 未做 Developer ID 签名和 Apple 公证，因此仍属于验证产物。
 
 ## 平台支持矩阵
@@ -22,7 +27,7 @@
 | Windows x64 | 启用 | 启用 | 启用 | 启用 | 启用 | 干净 Windows 11 五款真实首次安装、复检和启动通过 |
 | Windows ARM64 | 禁用 | 禁用 | 禁用 | 启用 | 启用 | 构建与静态制品检查通过；真机待验证 |
 | macOS Intel | 启用 | 不支持 | 启用 | 启用 | 启用 | 直接应用包链与 Intel 验证制品启动通过；正式公证待完成 |
-| macOS Apple Silicon | 启用 | bootstrap 禁用 | 启用 | 启用 | 启用 | 包身份/架构链通过；原生真机启动与使用待验证 |
+| macOS Apple Silicon | 启用 | bootstrap 禁用 | 启用 | 启用 | 启用 | M1 原生构建与安装助手界面通过；客户端完整使用矩阵未完成 |
 
 支持状态的权威代码来源是 [`config/trust-registry.toml`](../config/trust-registry.toml)。远端元数据只能在该文件定义的边界内提供版本和地址，不能扩大信任范围。
 
@@ -48,14 +53,15 @@
 - Hermes bootstrap 的厂商取消结果和部分可选组件提示不够可靠；`easy agent` 最终仍以固定安装身份、版本和本地运行复检为准。
 - CC Switch 采用用户目录安装时，另一 Windows 用户可能读取到机器级卸载记录但无法访问原用户目录中的程序。该跨用户检测边界尚未调整。
 - Windows x64 尚未覆盖五款产品的全部旧版更新、所有 UAC/断网/系统服务异常和账号业务场景。
-- Windows ARM64 与 Apple Silicon macOS 缺少对应真机；虚拟机或交叉构建结果不能代替真机验收。
+- Windows ARM64 仍缺少真机验证。Apple Silicon 已有 M1 本地验证，但系统 Applications 首次安装、旧版升级、客户端独立启动及账号业务尚未覆盖完整矩阵。
+- WorkBuddy 5.5.3.37748631 两种 Mac 官方包现使用 `com.tencent.workbuddy.mac`，已固定新身份。旧 ID 仅限检测已安装的同 Team 应用，下载包与安装后复检必须匹配新 ID；旧签名包到新包的实际升级尚缺真实样本。
 
 ## macOS 当前边界
 
-- WorkBuddy、CC Switch、Claude 和 ChatGPT 的 Intel/Apple Silicon 包已完成完整下载、签名/身份/架构验证、临时首次安装、原位更新、失败回滚和失败新装清理。
+- 历史验证覆盖过 WorkBuddy、CC Switch、Claude 和 ChatGPT 的 Intel/Apple Silicon 下载、身份验证和临时激活链，不保证厂商后续包身份保持不变。首次结果见 [Apple Silicon 原生开发验证](../evidence/apple-silicon-native-validation-2026-09-06.md)，后续修复及四平台最新检查见 [安装来源审计](../evidence/distribution-source-audit-2026-09-06.md)。
 - WorkBuddy 官方 API 提供的 macOS SHA-256 与实际 CDN 文件不一致。只有 WorkBuddy/macOS 使用专用策略：记录厂商摘要异常，并继续强制 Apple 签名、固定 Bundle ID、Team ID、版本、目标架构和稳定文件绑定；该策略不能复用于其他产品。
 - Claude 和 ChatGPT 的受验证回退只在明确网络或地区可用性失败时进入，且必须与官方候选的版本、架构、包型和签名完全一致。
-- Hermes Apple Silicon DMG 是厂商 bootstrap，不是已建模的最终直接 `.app` 包，因此保持禁用。
+- Hermes Apple Silicon DMG 是厂商 bootstrap，默认追踪 `main`，setup 版本、官网版本和最终桌面/runtime 版本不同；最终应用安装与复检尚未实现，因此保持禁用。Windows bootstrap 源码同样存在可变分支与下游镜像回退，历史安装通过不能证明当前来源可重复。
 
 ## 发布与验证 Gate
 
@@ -64,7 +70,7 @@
 | Windows x64 干净机真实首次安装 | 已完成 |
 | Windows 10 基础兼容与 CC Switch 真实安装 | 已完成 |
 | Windows ARM64 真机安装矩阵 | 待完成 |
-| Apple Silicon 真机启动与使用 | 待完成 |
+| Apple Silicon 真机启动与使用 | M1 安装助手原生启动通过；客户端完整使用矩阵待完成 |
 | Windows Authenticode 发布签名 | 待提供证书 |
 | macOS Developer ID、公证与 stapling | 待提供 Apple 凭据 |
 | 五款客户端全部更新/异常/账号业务矩阵 | 部分完成 |
@@ -83,6 +89,7 @@
 
 ## 权威证据
 
+- [Apple Silicon 原生开发验证与当前制品复验](../evidence/apple-silicon-native-validation-2026-09-06.md)
 - [多环境与真实安装测试](../evidence/multi-environment-test-2026-08-21.md)
 - [macOS 功能链路审计](../evidence/macos-functional-parity-audit-2026-08-08.md)
 - [Claude 四平台接入审计](../evidence/claude-integration-audit-2026-08-12.md)

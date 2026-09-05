@@ -72,6 +72,24 @@ pub fn detect_product(product: ProductId, trust: Option<&TrustEntry>) -> Result<
             product.display_name()
         )));
     };
+    if product == ProductId::Hermes
+        && trust.macos_install_strategy == Some(MacOsInstallStrategy::VendorBootstrap)
+    {
+        let root = match std::env::var_os("HERMES_HOME") {
+            Some(root) => PathBuf::from(root),
+            None => user_home_directory()?.join(".hermes"),
+        };
+        if !root.is_absolute() {
+            return Err("HERMES_HOME 必须是绝对路径，拒绝猜测安装位置".into());
+        }
+        let observation = super::hermes::observe_installation(
+            &root,
+            crate::core::OperatingSystem::MacOs,
+            trust.architecture,
+            None,
+        )?;
+        return Ok(Detection::absent(observation.summary()));
+    }
     let Some(application_name) = trust.macos_application_name.as_deref() else {
         return Ok(Detection::absent("macOS 应用名尚未固定"));
     };
@@ -272,7 +290,7 @@ fn inspect_app_bundle(
     trust: &TrustEntry,
     expected_architecture: Option<Architecture>,
 ) -> Result<AppInspection, String> {
-    inspect_app_bundle_with_policy(app, trust, expected_architecture, false, true, true)
+    inspect_app_bundle_with_policy(app, trust, expected_architecture, false, true, true, false)
 }
 
 fn inspect_app_bundle_without_gatekeeper(
@@ -280,7 +298,7 @@ fn inspect_app_bundle_without_gatekeeper(
     trust: &TrustEntry,
     expected_architecture: Option<Architecture>,
 ) -> Result<AppInspection, String> {
-    inspect_app_bundle_with_policy(app, trust, expected_architecture, false, false, true)
+    inspect_app_bundle_with_policy(app, trust, expected_architecture, false, false, true, false)
 }
 
 fn inspect_installed_app_bundle(
@@ -288,7 +306,76 @@ fn inspect_installed_app_bundle(
     trust: &TrustEntry,
     expected_architecture: Option<Architecture>,
 ) -> Result<AppInspection, String> {
-    inspect_app_bundle_with_policy(app, trust, expected_architecture, true, false, false)
+    inspect_app_bundle_with_policy(app, trust, expected_architecture, true, false, false, true)
+}
+
+/// Diagnostic-only path. Never feed this result into install authorization.
+/// Final Hermes desktops can be locally signed, unlike the vendor setup app.
+#[cfg(target_os = "macos")]
+pub(super) fn observe_hermes_desktop_identity(
+    app: &Path,
+    architecture: Architecture,
+) -> Result<super::hermes::DesktopIdentityObservation, String> {
+    if architecture != Architecture::Arm64 {
+        return Err("Hermes desktop observation currently supports Apple Silicon only".into());
+    }
+    let registry = crate::core::TrustRegistry::embedded().map_err(|error| error.to_string())?;
+    let mut diagnostic_identity = registry
+        .find(
+            ProductId::Hermes,
+            crate::core::OperatingSystem::MacOs,
+            architecture,
+        )
+        .cloned()
+        .ok_or("missing Hermes setup identity")?;
+    // This temporary identity never modifies the registry or its disabled flag.
+    // Validate desktop structure/signature integrity, not the setup's Team ID.
+    diagnostic_identity.macos_bundle_id = Some("com.nousresearch.hermes".into());
+    diagnostic_identity.macos_team_id = None;
+    let result = inspect_app_bundle_with_policy(
+        app,
+        &diagnostic_identity,
+        Some(architecture),
+        false,
+        false,
+        true,
+        false,
+    )?;
+    if result
+        .executable_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        != Some("Hermes")
+    {
+        return Err("unexpected Hermes desktop executable name".into());
+    }
+    Ok(super::hermes::DesktopIdentityObservation {
+        bundle_id: result.bundle_id,
+        version: result.version,
+        target_architecture_matches: true,
+        signature_valid: true,
+        signature_team: result.team_id,
+        vendor_publisher_verified: false,
+        gatekeeper_checked: false,
+        runtime_health_checked: false,
+    })
+}
+
+fn accepts_bundle_identity(trust: &TrustEntry, actual: &str, installed: bool) -> bool {
+    if trust.macos_bundle_id.as_deref() == Some(actual) {
+        return true;
+    }
+    // Only an existing, separately signature-verified WorkBuddy installation may
+    // use the previous identity. Downloaded and newly activated apps must use
+    // the current identity, including during an upgrade from the old bundle.
+    installed
+        && trust.product == ProductId::WorkBuddy
+        && trust.os == crate::core::OperatingSystem::MacOs
+        && trust.macos_bundle_id.as_deref() == Some("com.tencent.workbuddy.mac")
+        && trust.macos_team_id.as_deref() == Some("FN2V63AD2J")
+        && trust.macos_application_name.as_deref() == Some("WorkBuddy.app")
+        && trust.macos_install_strategy == Some(MacOsInstallStrategy::DirectAppBundle)
+        && actual == "com.workbuddy.workbuddy"
 }
 
 fn inspect_app_bundle_with_policy(
@@ -298,6 +385,7 @@ fn inspect_app_bundle_with_policy(
     allow_known_runtime_resource: bool,
     require_gatekeeper: bool,
     deep_codesign: bool,
+    allow_legacy_identity: bool,
 ) -> Result<AppInspection, String> {
     let metadata = fs::symlink_metadata(app)
         .map_err(|error| format!("cannot inspect app bundle {}: {error}", app.display()))?;
@@ -335,7 +423,7 @@ fn inspect_app_bundle_with_policy(
         .macos_bundle_id
         .as_deref()
         .ok_or_else(|| "trust registry has no pinned macOS Bundle ID".to_owned())?;
-    if bundle_id != expected_bundle_id {
+    if !accepts_bundle_identity(trust, bundle_id, allow_legacy_identity) {
         return Err(format!(
             "Bundle ID mismatch: expected {expected_bundle_id}, got {bundle_id}"
         ));
@@ -1376,7 +1464,7 @@ fn timeout_for_command(program: &str) -> Duration {
     }
 }
 
-fn command_output_with_timeout(
+pub(super) fn command_output_with_timeout(
     program: &str,
     arguments: &[&str],
     timeout: Duration,
@@ -1526,6 +1614,63 @@ fn path_text(path: &Path) -> Result<&str, String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn hermes_local_signature_does_not_prove_vendor_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join("Hermes.app");
+        std::fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        std::fs::copy("/usr/bin/true", app.join("Contents/MacOS/Hermes")).unwrap();
+        let plist = r#"<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>
+            <key>CFBundleIdentifier</key><string>com.nousresearch.hermes</string>
+            <key>CFBundleExecutable</key><string>Hermes</string>
+            <key>CFBundleShortVersionString</key><string>0.21.0</string>
+            </dict></plist>"#;
+        std::fs::write(app.join("Contents/Info.plist"), plist).unwrap();
+        let sign = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(&app)
+            .output()
+            .unwrap();
+        assert!(sign.status.success());
+        // On Intel hosts the system fixture may lack ARM64; rejection is required.
+        let result = super::observe_hermes_desktop_identity(&app, crate::core::Architecture::Arm64);
+        if !super::read_macho_architectures(&app.join("Contents/MacOS/Hermes"))
+            .unwrap()
+            .contains(&crate::core::Architecture::Arm64)
+        {
+            assert!(result.is_err());
+            return;
+        }
+        let result = result.unwrap();
+        assert!(result.signature_valid);
+        assert!(!result.vendor_publisher_verified);
+        assert!(!result.runtime_health_checked);
+        assert!(!result.gatekeeper_checked);
+        std::fs::write(
+            app.join("Contents/Info.plist"),
+            plist.replace("0.21.0", "0.21.1"),
+        )
+        .unwrap();
+        assert!(
+            super::observe_hermes_desktop_identity(&app, crate::core::Architecture::Arm64).is_err()
+        );
+        // Even a signed app with the setup identity must not pass as desktop.
+        std::fs::write(
+            app.join("Contents/Info.plist"),
+            plist.replace("com.nousresearch.hermes", "com.nousresearch.hermes.setup"),
+        )
+        .unwrap();
+        let sign = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(&app)
+            .output()
+            .unwrap();
+        assert!(sign.status.success());
+        assert!(
+            super::observe_hermes_desktop_identity(&app, crate::core::Architecture::Arm64).is_err()
+        );
+    }
     use super::*;
     use std::io::Write;
 
@@ -1538,6 +1683,46 @@ mod tests {
         version_is_older_for_product,
     };
     use crate::core::{OperatingSystem, TrustRegistry};
+
+    #[test]
+    fn workbuddy_legacy_identity_is_only_accepted_for_existing_installs() {
+        let registry = TrustRegistry::embedded().unwrap();
+        for architecture in [Architecture::X64, Architecture::Arm64] {
+            let trust = registry
+                .find(ProductId::WorkBuddy, OperatingSystem::MacOs, architecture)
+                .unwrap();
+            assert!(accepts_bundle_identity(
+                trust,
+                "com.tencent.workbuddy.mac",
+                false
+            ));
+            assert!(accepts_bundle_identity(
+                trust,
+                "com.workbuddy.workbuddy",
+                true
+            ));
+            assert!(!accepts_bundle_identity(
+                trust,
+                "com.workbuddy.workbuddy",
+                false
+            ));
+            assert!(!accepts_bundle_identity(trust, "com.tencent.other", true));
+            let mut wrong_team = trust.clone();
+            wrong_team.macos_team_id = Some("OTHERTEAM".into());
+            assert!(!accepts_bundle_identity(
+                &wrong_team,
+                "com.workbuddy.workbuddy",
+                true
+            ));
+            let mut wrong_product = trust.clone();
+            wrong_product.product = ProductId::Claude;
+            assert!(!accepts_bundle_identity(
+                &wrong_product,
+                "com.workbuddy.workbuddy",
+                true
+            ));
+        }
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

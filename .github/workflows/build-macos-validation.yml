@@ -8,7 +8,12 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15-intel
+    name: Universal DMG validated on ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, macos-15]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
       - name: Check out source
@@ -28,7 +33,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: macos-universal-${{ hashFiles('Cargo.lock') }}
+          key: macos-universal-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'packaging/build-macos.sh', 'packaging/macos/Info.plist') }}
 
       - name: Build ad-hoc signed Universal DMG
         env:
@@ -45,7 +50,7 @@ jobs:
       - name: Upload validation DMG
         uses: actions/upload-artifact@v6
         with:
-          name: easy-agent-macos-universal-validation
+          name: easy-agent-macos-universal-validation-${{ runner.arch }}
           path: |
             dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg
             dist/SHA256SUMS-macos-universal-UNNOTARIZED-VALIDATION.txt
