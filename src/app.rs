@@ -7,7 +7,10 @@ use std::thread;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichText};
 
-use crate::adapters::{resolve_install_plan, resolve_verified_download_fallback};
+use crate::adapters::{
+    resolve_install_plan, resolve_microsoft_store_latest_version,
+    resolve_verified_download_fallback,
+};
 use crate::core::{
     Architecture, ArtifactSource, Detection, InstallExecutionGate, InstallPlan, OperatingSystem,
     OperationLog, OperationState, OperationUpdate, PackageKind, PlatformInfo, ProductId,
@@ -741,18 +744,25 @@ impl eframe::App for InstallerApp {
                                                         &candidate.version
                                                     )
                                                 ),
-                                                InstallPlan::MicrosoftStore(_) => view
-                                                    .detection
-                                                    .version
-                                                    .as_deref()
-                                                    .map(|version| {
-                                                        format!(
-                                                            "当前版本 {version} → 安装微软提供的最新版本"
-                                                        )
-                                                    })
-                                                    .unwrap_or_else(|| {
-                                                        "未安装 → 安装微软提供的最新版本".into()
-                                                    }),
+                                                InstallPlan::MicrosoftStore(plan) => {
+                                                    match (
+                                                        view.detection.version.as_deref(),
+                                                        plan.latest_version.as_deref(),
+                                                    ) {
+                                                        (Some(current), Some(latest)) => {
+                                                            format!("{current} → {latest}")
+                                                        }
+                                                        (None, Some(latest)) => {
+                                                            format!("未安装 → {latest}")
+                                                        }
+                                                        (Some(current), None) => format!(
+                                                            "当前版本 {current} → 安装微软提供的最新版本"
+                                                        ),
+                                                        (None, None) => {
+                                                            "未安装 → 安装微软提供的最新版本".into()
+                                                        }
+                                                    }
+                                                }
                                             };
                                             ui.label(
                                                 RichText::new(version)
@@ -1106,13 +1116,31 @@ fn product_subtitle(
                 ),
             }
         }
-        Some(InstallPlan::MicrosoftStore(_)) => {
+        Some(InstallPlan::MicrosoftStore(plan)) => {
             match (view.detection.installed, view.detection.version.as_deref()) {
-                (true, Some(installed)) => {
-                    format!("已安装 {installed} · 可检查并安装更新")
-                }
+                (true, Some(installed)) => match plan.latest_version.as_deref() {
+                    Some(latest)
+                        if version_is_older_for_product(view.product, installed, latest) =>
+                    {
+                        format!(
+                            "已安装 {installed} · 可更新至 {}",
+                            display_version(view.product, latest)
+                        )
+                    }
+                    Some(_) => format!("已安装 {installed} · 已是最新版本"),
+                    None => format!("已安装 {installed} · 可检查并安装更新"),
+                },
                 (true, None) => "已检测到安装 · 版本未知".into(),
-                (false, _) => "可安装最新版本".into(),
+                (false, _) => plan
+                    .latest_version
+                    .as_deref()
+                    .map(|latest| {
+                        format!(
+                            "可安装 · 最新版本 {}",
+                            display_version(view.product, latest)
+                        )
+                    })
+                    .unwrap_or_else(|| "可安装最新版本".into()),
             }
         }
         None => match &view.support {
@@ -1183,15 +1211,27 @@ fn product_action(view: &ProductView, scanning: bool) -> (&'static str, bool) {
                         ("安装", true)
                     }
                 }
-                InstallPlan::MicrosoftStore(_) => {
+                InstallPlan::MicrosoftStore(plan) => {
                     if view.detection.managed || !view.detection.management_known {
                         return ("受管理", false);
                     }
                     if view.detection.installed {
-                        if view.detection.version.is_some() {
-                            ("更新", true)
-                        } else {
-                            ("版本未知", false)
+                        match (
+                            view.detection.version.as_deref(),
+                            plan.latest_version.as_deref(),
+                        ) {
+                            (Some(installed), Some(latest))
+                                if version_is_older_for_product(
+                                    view.product,
+                                    installed,
+                                    latest,
+                                ) =>
+                            {
+                                ("更新", true)
+                            }
+                            (Some(_), Some(_)) => ("已安装", false),
+                            (Some(_), None) => ("检查更新", true),
+                            (None, _) => ("版本未知", false),
                         }
                     } else {
                         ("安装", true)
@@ -1207,11 +1247,16 @@ fn resolve_product_plan(
     platform: &PlatformInfo,
     registry: Option<&TrustRegistry>,
 ) -> Result<InstallPlan, String> {
-    registry
-        .ok_or_else(|| "信任注册表不可用".to_owned())
-        .and_then(|registry| {
-            resolve_install_plan(product, platform, registry).map_err(|error| error.to_string())
-        })
+    let registry = registry.ok_or_else(|| "信任注册表不可用".to_owned())?;
+    let mut plan =
+        resolve_install_plan(product, platform, registry).map_err(|error| error.to_string())?;
+    if let InstallPlan::MicrosoftStore(store_plan) = &mut plan
+        && let Some(trust) = registry.find(product, platform.os, platform.architecture)
+        && let Ok(version) = resolve_microsoft_store_latest_version(store_plan, trust)
+    {
+        store_plan.latest_version = Some(version);
+    }
+    Ok(plan)
 }
 
 fn product_detail(view: &ProductView) -> String {
@@ -1298,8 +1343,9 @@ fn install_plan_audit_message(plan: &InstallPlan) -> String {
             )
         }
         InstallPlan::MicrosoftStore(plan) => format!(
-            "artifact_source=microsoft_web_installer target_architecture={:?}",
-            plan.architecture
+            "artifact_source=microsoft_web_installer target_architecture={:?} target_version={}",
+            plan.architecture,
+            plan.latest_version.as_deref().unwrap_or("unknown")
         ),
     }
 }
@@ -1576,6 +1622,7 @@ mod tests {
                     product: ProductId::ChatGpt,
                     architecture: Architecture::X64,
                     store_id: "9PLM9XGG6VKS".into(),
+                    latest_version: Some("26.901.6511.0".into()),
                 },
             )),
             result_unknown: false,
@@ -1650,7 +1697,7 @@ mod tests {
         let mut app = test_app();
         assert_eq!(
             product_subtitle(&app.products[0], false, None),
-            "已安装 26.721.11231.0 · 可检查并安装更新"
+            "已安装 26.721.11231.0 · 可更新至 26.901.6511.0"
         );
         assert_eq!(product_action(&app.products[0], false), ("更新", true));
         assert_eq!(product_action(&app.products[1], false), ("安装", true));
@@ -1666,6 +1713,33 @@ mod tests {
         assert!(app.confirmation_open);
         assert!(!app.products[0].selected);
         assert!(app.products[1].selected);
+    }
+
+    #[test]
+    fn current_chatgpt_store_version_disables_the_update_action() {
+        let mut view = chatgpt_view();
+        view.detection.version = Some("26.901.6511.0".into());
+
+        assert_eq!(
+            product_subtitle(&view, false, None),
+            "已安装 26.901.6511.0 · 已是最新版本"
+        );
+        assert_eq!(product_action(&view, false), ("已安装", false));
+    }
+
+    #[test]
+    fn unknown_chatgpt_store_version_is_presented_as_a_check() {
+        let mut view = chatgpt_view();
+        let Some(InstallPlan::MicrosoftStore(plan)) = &mut view.install_plan else {
+            panic!("ChatGPT fixture must use a Store plan");
+        };
+        plan.latest_version = None;
+
+        assert_eq!(
+            product_subtitle(&view, false, None),
+            "已安装 26.721.11231.0 · 可检查并安装更新"
+        );
+        assert_eq!(product_action(&view, false), ("检查更新", true));
     }
 
     #[test]

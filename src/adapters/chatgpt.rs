@@ -1,3 +1,4 @@
+use reqwest::header::{CONTENT_LENGTH, HeaderMap};
 use serde::Deserialize;
 use url::Url;
 
@@ -10,6 +11,10 @@ use super::AdapterError;
 
 const MAX_CHATGPT_ARTIFACT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MIRROR_CLOCK_SKEW_SECONDS: u64 = 5 * 60;
+
+const PACKAGE_IDENTITY_HEADER: &str = "x-ms-meta-package_identity";
+const PACKAGE_ARCHITECTURE_HEADER: &str = "x-ms-meta-architecture";
+const PACKAGE_VERSION_HEADER: &str = "x-ms-meta-package_version";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +32,55 @@ struct ChatGptMirrorManifest {
     first_seen_at_unix: u64,
     last_successful_upstream_check_at_unix: u64,
     generated_at_unix: u64,
+}
+
+pub fn parse_chatgpt_windows_msix_headers(
+    headers: &HeaderMap,
+    architecture: Architecture,
+    expected_identity: &str,
+) -> Result<String, AdapterError> {
+    let header = |name: &'static str| {
+        headers
+            .get(name)
+            .ok_or_else(|| AdapterError::Contract(format!("ChatGPT MSIX header {name} is absent")))?
+            .to_str()
+            .map(str::trim)
+            .map_err(|_| AdapterError::Contract(format!("ChatGPT MSIX header {name} is not text")))
+    };
+    let identity = header(PACKAGE_IDENTITY_HEADER)?;
+    if identity != expected_identity {
+        return Err(AdapterError::Contract(format!(
+            "ChatGPT MSIX package identity changed: {identity}"
+        )));
+    }
+    let expected_architecture = match architecture {
+        Architecture::X64 => "x64",
+        Architecture::Arm64 => "arm64",
+        Architecture::Unsupported => return Err(AdapterError::NoMatchingArtifact),
+    };
+    let actual_architecture = header(PACKAGE_ARCHITECTURE_HEADER)?;
+    if !actual_architecture.eq_ignore_ascii_case(expected_architecture) {
+        return Err(AdapterError::Contract(format!(
+            "ChatGPT MSIX architecture changed: {actual_architecture}"
+        )));
+    }
+    let version = header(PACKAGE_VERSION_HEADER)?;
+    let parts = version
+        .split('.')
+        .map(str::parse::<u16>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| AdapterError::Contract("ChatGPT MSIX version is invalid".into()))?;
+    if parts.len() != 4 {
+        return Err(AdapterError::Contract(
+            "ChatGPT MSIX version is invalid".into(),
+        ));
+    }
+    header(CONTENT_LENGTH.as_str())?
+        .parse::<u64>()
+        .ok()
+        .filter(|size| *size > 0 && *size <= MAX_CHATGPT_ARTIFACT_BYTES)
+        .ok_or_else(|| AdapterError::Contract("ChatGPT MSIX size is invalid".into()))?;
+    Ok(version.to_owned())
 }
 
 pub fn parse_chatgpt_macos_appcast(
@@ -262,6 +316,50 @@ fn is_numeric_dot_version(version: &str) -> bool {
 mod tests {
     use super::*;
     use crate::core::{OperatingSystem, TrustRegistry};
+    use reqwest::header::{HeaderName, HeaderValue};
+
+    fn windows_msix_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (name, value) in [
+            (PACKAGE_IDENTITY_HEADER, "OpenAI.Codex"),
+            (PACKAGE_ARCHITECTURE_HEADER, "x64"),
+            (PACKAGE_VERSION_HEADER, "26.901.6511.0"),
+            (CONTENT_LENGTH.as_str(), "796592344"),
+        ] {
+            headers.insert(
+                HeaderName::from_static(name),
+                HeaderValue::from_static(value),
+            );
+        }
+        headers
+    }
+
+    #[test]
+    fn windows_msix_headers_pin_identity_architecture_version_and_size() {
+        let headers = windows_msix_headers();
+        assert_eq!(
+            parse_chatgpt_windows_msix_headers(&headers, Architecture::X64, "OpenAI.Codex")
+                .unwrap(),
+            "26.901.6511.0"
+        );
+
+        for (name, value) in [
+            (PACKAGE_IDENTITY_HEADER, "Other.Product"),
+            (PACKAGE_ARCHITECTURE_HEADER, "arm64"),
+            (PACKAGE_VERSION_HEADER, "latest"),
+            (CONTENT_LENGTH.as_str(), "0"),
+        ] {
+            let mut changed = headers.clone();
+            changed.insert(
+                HeaderName::from_static(name),
+                HeaderValue::from_static(value),
+            );
+            assert!(
+                parse_chatgpt_windows_msix_headers(&changed, Architecture::X64, "OpenAI.Codex")
+                    .is_err()
+            );
+        }
+    }
 
     #[test]
     fn macos_appcast_carries_dynamic_minimum_version_and_pins_artifact_metadata() {

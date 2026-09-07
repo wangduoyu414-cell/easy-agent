@@ -6,11 +6,15 @@ mod resolver;
 mod workbuddy;
 
 pub use cc_switch::parse_cc_switch_manifest;
-pub use chatgpt::{candidate_from_verified_chatgpt_mirror, parse_chatgpt_macos_appcast};
+pub use chatgpt::{
+    candidate_from_verified_chatgpt_mirror, parse_chatgpt_macos_appcast,
+    parse_chatgpt_windows_msix_headers,
+};
 pub use claude::{candidate_from_claude_redirect, candidate_from_verified_claude_mirror};
 pub use hermes::parse_hermes_homepage;
 pub use resolver::{
-    ResolveError, resolve_install_plan, resolve_latest, resolve_verified_download_fallback,
+    ResolveError, resolve_install_plan, resolve_latest, resolve_microsoft_store_latest_version,
+    resolve_verified_download_fallback,
 };
 pub use workbuddy::parse_workbuddy_update;
 

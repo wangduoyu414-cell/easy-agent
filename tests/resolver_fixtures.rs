@@ -1,7 +1,8 @@
 use easy_agent::adapters::{
     candidate_from_claude_redirect, candidate_from_verified_claude_mirror,
     parse_cc_switch_manifest, parse_chatgpt_macos_appcast, parse_hermes_homepage,
-    parse_workbuddy_update, resolve_install_plan, resolve_verified_download_fallback,
+    parse_workbuddy_update, resolve_install_plan, resolve_microsoft_store_latest_version,
+    resolve_verified_download_fallback,
 };
 use easy_agent::core::{
     Architecture, ArtifactSource, InstallPlan, OperatingSystem, PackageKind, PlatformInfo,
@@ -462,4 +463,30 @@ fn resolves_chatgpt_windows_to_the_fixed_store_product() {
     assert_eq!(plan.product, ProductId::ChatGpt);
     assert_eq!(plan.architecture, Architecture::X64);
     assert_eq!(plan.store_id, "9PLM9XGG6VKS");
+    assert_eq!(plan.latest_version, None);
+}
+
+#[test]
+#[ignore = "live OpenAI ChatGPT Windows MSIX version metadata check"]
+fn live_chatgpt_windows_msix_headers_publish_the_latest_version() {
+    let registry = TrustRegistry::embedded().unwrap();
+    for architecture in [Architecture::X64, Architecture::Arm64] {
+        let platform = PlatformInfo {
+            os: OperatingSystem::Windows,
+            architecture,
+            os_version: None,
+            description: "live ChatGPT Windows version metadata fixture".into(),
+        };
+        let InstallPlan::MicrosoftStore(plan) =
+            resolve_install_plan(ProductId::ChatGpt, &platform, &registry).unwrap()
+        else {
+            panic!("ChatGPT Windows must use the Store background workflow");
+        };
+        let trust = registry
+            .find(ProductId::ChatGpt, OperatingSystem::Windows, architecture)
+            .unwrap();
+        let version = resolve_microsoft_store_latest_version(&plan, trust).unwrap();
+        assert_eq!(version.split('.').count(), 4);
+        assert!(version.split('.').all(|part| part.parse::<u16>().is_ok()));
+    }
 }

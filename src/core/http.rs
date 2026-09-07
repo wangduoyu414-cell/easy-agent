@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 
 use reqwest::blocking::Client;
-use reqwest::header::{LOCATION, RANGE};
+use reqwest::header::{HeaderMap, LOCATION, RANGE};
 use thiserror::Error;
 use url::Url;
 
@@ -82,6 +82,44 @@ pub fn fetch_allowed_bytes(
     rules: &[UrlRule],
 ) -> Result<(Url, Vec<u8>), HttpError> {
     retry_metadata_operation(|| fetch_allowed_bytes_once(client, start, rules))
+}
+
+pub fn fetch_allowed_head(
+    client: &Client,
+    start: &Url,
+    rules: &[UrlRule],
+) -> Result<(Url, HeaderMap), HttpError> {
+    retry_metadata_operation(|| fetch_allowed_head_once(client, start, rules))
+}
+
+fn fetch_allowed_head_once(
+    client: &Client,
+    start: &Url,
+    rules: &[UrlRule],
+) -> Result<(Url, HeaderMap), HttpError> {
+    let mut current = start.clone();
+    for redirect_count in 0..=MAX_REDIRECTS {
+        ensure_allowed_url_against_rules(&current, rules)?;
+        let response = client.head(current.clone()).send()?;
+        if response.status().is_redirection() {
+            if redirect_count == MAX_REDIRECTS {
+                return Err(HttpError::RedirectLimit);
+            }
+            let location = response
+                .headers()
+                .get(LOCATION)
+                .and_then(|value| value.to_str().ok())
+                .ok_or(HttpError::MissingRedirectLocation)?;
+            current = current.join(location)?;
+            continue;
+        }
+        if !response.status().is_success() {
+            return Err(HttpError::HttpStatus(response.status()));
+        }
+        ensure_allowed_url_against_rules(response.url(), rules)?;
+        return Ok((response.url().clone(), response.headers().clone()));
+    }
+    Err(HttpError::RedirectLimit)
 }
 
 fn fetch_allowed_bytes_once(

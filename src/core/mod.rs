@@ -13,7 +13,7 @@ pub use download::{
     download_to_private_staging_controlled, save_verified_download_copy,
 };
 pub use http::{
-    HttpError, fetch_allowed_bytes, fetch_official_bytes, fetch_official_text,
+    HttpError, fetch_allowed_bytes, fetch_allowed_head, fetch_official_bytes, fetch_official_text,
     resolve_official_url, safe_artifact_client, safe_http_client,
 };
 pub use model::{

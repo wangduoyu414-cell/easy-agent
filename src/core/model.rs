@@ -225,6 +225,7 @@ pub struct MicrosoftStorePlan {
     pub product: ProductId,
     pub architecture: Architecture,
     pub store_id: String,
+    pub latest_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,7 +252,7 @@ impl InstallPlan {
     pub fn target_version(&self) -> Option<&str> {
         match self {
             Self::DirectPackage(candidate) => Some(&candidate.version),
-            Self::MicrosoftStore(_) => None,
+            Self::MicrosoftStore(plan) => plan.latest_version.as_deref(),
         }
     }
 }

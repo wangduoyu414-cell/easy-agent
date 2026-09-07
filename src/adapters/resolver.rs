@@ -7,13 +7,14 @@ use crate::core::{
     ArtifactSource, DistributionKind, HttpError, InstallPlan, MacOsInstallStrategy,
     MicrosoftStorePlan, OperatingSystem, PlatformInfo, ProductId, ReleaseCandidate, SecurityError,
     TrustRegistry, TrustRegistryError, ensure_allowed_url, ensure_allowed_url_against_rules,
-    fetch_allowed_bytes, fetch_official_text, resolve_official_url, safe_http_client,
+    fetch_allowed_bytes, fetch_allowed_head, fetch_official_text, resolve_official_url,
+    safe_http_client,
 };
 
 use super::{
     AdapterError, candidate_from_claude_redirect, candidate_from_verified_chatgpt_mirror,
     candidate_from_verified_claude_mirror, parse_cc_switch_manifest, parse_chatgpt_macos_appcast,
-    parse_hermes_homepage, parse_workbuddy_update,
+    parse_chatgpt_windows_msix_headers, parse_hermes_homepage, parse_workbuddy_update,
 };
 
 #[derive(Debug, Error)]
@@ -90,6 +91,7 @@ pub fn resolve_install_plan(
             product,
             architecture: platform.architecture,
             store_id,
+            latest_version: None,
         }));
     }
     if trust.entry_urls.is_empty() {
@@ -201,6 +203,60 @@ pub fn resolve_install_plan(
     })?;
     validate_resolved_candidate(&candidate, trust, platform)?;
     Ok(InstallPlan::DirectPackage(candidate))
+}
+
+pub fn resolve_microsoft_store_latest_version(
+    plan: &MicrosoftStorePlan,
+    trust: &crate::core::TrustEntry,
+) -> Result<String, ResolveError> {
+    if plan.product != ProductId::ChatGpt
+        || trust.product != plan.product
+        || trust.os != OperatingSystem::Windows
+        || trust.architecture != plan.architecture
+        || trust.distribution != DistributionKind::MicrosoftStore
+        || trust.package_kinds.as_slice() != [crate::core::PackageKind::Msix]
+    {
+        return Err(ResolveError::NoDirectResolver(
+            "latest-version metadata is limited to the pinned ChatGPT Windows MSIX".into(),
+        ));
+    }
+    let msix_url = Url::parse(trust.entry_urls.get(1).ok_or_else(|| {
+        ResolveError::NoDirectResolver("ChatGPT Windows trust entry has no MSIX URL".into())
+    })?)?;
+    let expected_file = match plan.architecture {
+        crate::core::Architecture::X64 => "ChatGPT-x64.msix",
+        crate::core::Architecture::Arm64 => "ChatGPT-arm64.msix",
+        crate::core::Architecture::Unsupported => {
+            return Err(ResolveError::NoDirectResolver(
+                "unsupported ChatGPT Windows architecture".into(),
+            ));
+        }
+    };
+    if msix_url.host_str() != Some("persistent.oaistatic.com")
+        || msix_url.path() != format!("/codex-app-prod/{expected_file}")
+        || msix_url.query().is_some()
+        || msix_url.fragment().is_some()
+    {
+        return Err(ResolveError::Adapter(AdapterError::Contract(
+            "ChatGPT Windows MSIX version endpoint changed".into(),
+        )));
+    }
+    ensure_allowed_url(&msix_url, trust)?;
+    let client = safe_http_client()?;
+    let (final_url, headers) = fetch_allowed_head(&client, &msix_url, &trust.url_rules)?;
+    if final_url != msix_url {
+        return Err(ResolveError::Adapter(AdapterError::Contract(
+            "ChatGPT Windows MSIX version endpoint redirected".into(),
+        )));
+    }
+    let expected_identity = trust.package_identity.as_deref().ok_or_else(|| {
+        ResolveError::NoDirectResolver("ChatGPT Windows package identity is absent".into())
+    })?;
+    Ok(parse_chatgpt_windows_msix_headers(
+        &headers,
+        plan.architecture,
+        expected_identity,
+    )?)
 }
 
 fn validate_resolved_candidate(

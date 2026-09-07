@@ -41,6 +41,9 @@
 
 完整步骤、环境要求和排错见 [安装指南](docs/installation.md)。所有版本见 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 
+> [!NOTE]
+> 主分支已新增 ChatGPT Windows 最新版本识别：读取并校验 OpenAI 固定 MSIX 的版本、产品身份、架构和大小元数据；本机已是最新版时不再显示可点击的更新按钮。该修复晚于 `v0.1.0-preview.4` 制品，需后续 Release 重新构建后才会进入公开 EXE。
+
 ## 项目简介
 
 `easy agent` 只管理 WorkBuddy、Hermes Agent、CC Switch、Claude Desktop 和 ChatGPT。它不是通用软件管家，也不执行网页返回的脚本；官方入口、包类型、签名主体、Bundle/Package 身份和架构规则均固定在应用内，证据不足时停止安装。
@@ -84,7 +87,7 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 - 2026-09-06 已修复 WorkBuddy 两种 Mac 架构的 Bundle ID 迁移，并验证当前官方包的临时安装与回滚。Hermes Mac 安装器默认追踪 main，缺少固定稳定版本与最终应用复检，继续禁用。Windows 当前包检查与关联影响见 [安装来源审计](evidence/distribution-source-audit-2026-09-06.md)。
 - Hermes 官方正式版固定源码已在 M1 上构建并完成真实桌面/后端联调；该自建测试样本不替代官方签名安装器的验证，见[真实运行证据](evidence/hermes-fixed-source-runtime-2026-09-06.md)。
 - 图形界面需要 OpenGL 2.0 或更高版本；缺少可用图形驱动的旧电脑或受限虚拟机可能无法启动。
-- Microsoft 没有提供稳定、可直接比较的 ChatGPT Windows“最新版本号”；已安装最新版时仍可能显示“更新”，该按钮表示让微软检查并安装可用版本。
+- ChatGPT Windows 会从固定 OpenAI MSIX 的受校验响应元数据读取最新版本；本机版本相同或更高时显示“已是最新版本”并禁用更新按钮，网络暂时无法确认时才显示“检查更新”。
 - Hermes Windows 安装器会自动准备 Node、Python、Git 等依赖，无需预装；干净环境建议约 5 GB 可用内存、数 GB 磁盘空间，并预留约 30 分钟。
 
 详细证据和未关闭项目见 [实现与验证状态](docs/implementation-status.md) 与 [多环境测试报告](evidence/multi-environment-test-2026-08-21.md)。

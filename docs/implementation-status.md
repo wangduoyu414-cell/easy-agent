@@ -9,6 +9,7 @@
 - `easy agent` 已实现 Windows x64/ARM64 与 macOS Intel/Apple Silicon 平台模型，以及下载、验证、安装、取消、复检、回滚和脱敏日志链路。
 - Windows x64 已在干净 Windows 11 虚拟机中通过五款客户端的真实首次安装、安装后复检和独立启动；Windows 10 已通过 CC Switch 的真实安装与复检。
 - Claude Windows 完整 MSIX 采用两阶段部署：管理员上下文完成机器级预配，随后在原登录用户上下文注册或更新同一已验证包，避免机器预配成功但当前用户仍保留旧版本。
+- ChatGPT Windows 会从固定 OpenAI MSIX 的响应元数据读取最新版本，并同时校验 Package Identity、目标架构、四段 AppX 版本和包大小；本机版本相同或更高时不再显示可点击的更新按钮。元数据暂时不可用时仍保留微软安装器安装能力。
 - 下载进度按约 1 MiB 增量合并，并保证起点和完成点仍会通知，避免小块网络读取触发数千次界面刷新和日志/测试输出。
 - Windows ARM64 当前只启用 Claude 和 ChatGPT。EXE 构建、PE 架构、图标和版本资源已通过检查，但仍缺少 ARM64 真机安装矩阵。
 - macOS Intel/Apple Silicon 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT 的直接应用包链。Hermes Intel 明确不支持；Hermes Apple Silicon 只识别 vendor bootstrap，当前禁用。
@@ -48,7 +49,6 @@
 ## 已知限制
 
 - GUI 依赖 OpenGL 2.0 或更高版本。缺少有效图形驱动的旧设备或受限虚拟机可能在启动时退出。
-- ChatGPT Windows 的微软分发链没有提供稳定、可直接比较的公开“最新版本号”。程序能精确识别本机 Package 身份和版本，但已安装最新版时仍可能保留“更新”按钮，让微软执行可用版本检查。
 - Hermes Windows 官方 bootstrap 会自行安装或配置 Node.js、Python、Git、uv、ripgrep、ffmpeg 等组件。干净环境无需预装这些工具，但建议约 5 GB 可用内存、数 GB 磁盘空间和约 30 分钟安装时间。
 - Hermes bootstrap 的厂商取消结果和部分可选组件提示不够可靠；`easy agent` 最终仍以固定安装身份、版本和本地运行复检为准。
 - CC Switch 采用用户目录安装时，另一 Windows 用户可能读取到机器级卸载记录但无法访问原用户目录中的程序。该跨用户检测边界尚未调整。

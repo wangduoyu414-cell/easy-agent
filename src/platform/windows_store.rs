@@ -133,6 +133,7 @@ enum PrimaryOutcome {
 struct StoreExpectation {
     product: ProductId,
     architecture: Architecture,
+    target_version: Option<String>,
     package_identity: String,
     package_family: String,
     publisher: String,
@@ -152,6 +153,7 @@ pub fn execute_microsoft_store_install(
     let expectation = StoreExpectation {
         product: request.plan.product,
         architecture: request.plan.architecture,
+        target_version: request.plan.latest_version.clone(),
         package_identity: config.package_identity.clone(),
         package_family: config.package_family.clone(),
         publisher: config.publisher.clone(),
@@ -193,6 +195,13 @@ fn run_store_workflow<B: StoreBackend>(
             ));
         }
         validate_store_detection(initial, expectation)?;
+        if let (Some(current), Some(target)) = (
+            initial.version.as_deref(),
+            expectation.target_version.as_deref(),
+        ) && !version_is_older(current, target)
+        {
+            return Ok(format!("已是最新版本：{current}"));
+        }
     }
     if backend.cancelled() {
         return Err(StoreFailure::cancelled("操作已在下载安装器前取消"));
@@ -226,6 +235,15 @@ fn run_store_workflow<B: StoreBackend>(
     {
         return Err(StoreFailure::hard(format!(
             "安装后版本 {after} 低于原版本 {before}，拒绝认定成功"
+        )));
+    }
+    if let (Some(target), Some(after)) = (
+        expectation.target_version.as_deref(),
+        detected.version.as_deref(),
+    ) && version_is_older(after, target)
+    {
+        return Err(StoreFailure::hard(format!(
+            "安装后版本 {after} 仍低于目标版本 {target}，拒绝认定成功"
         )));
     }
 
@@ -283,6 +301,7 @@ fn validate_store_detection(
 struct StoreRuntimeConfig {
     store_id: String,
     architecture: Architecture,
+    target_version: Option<String>,
     web_installer_url: Url,
     msix_url: Url,
     license_url: Url,
@@ -331,6 +350,7 @@ impl StoreRuntimeConfig {
         Ok(Self {
             store_id,
             architecture: request.plan.architecture,
+            target_version: request.plan.latest_version.clone(),
             web_installer_url,
             msix_url,
             license_url,
@@ -736,6 +756,14 @@ fn validate_msix_contract(
             package.version
         )));
     }
+    if let Some(target) = config.target_version.as_deref()
+        && version_is_older(&package.version, target)
+    {
+        return Err(StoreFailure::hard(format!(
+            "完整包版本 {} 低于已确认的目标版本 {target}",
+            package.version
+        )));
+    }
     if !package.dependencies.is_empty() {
         return Err(StoreFailure::hard(format!(
             "完整包新增了未固定的框架依赖：{}",
@@ -1119,6 +1147,7 @@ mod tests {
         StoreExpectation {
             product: ProductId::ChatGpt,
             architecture: Architecture::X64,
+            target_version: None,
             package_identity: "OpenAI.Codex".into(),
             package_family: "OpenAI.Codex_2p2nqsd0c76g0".into(),
             publisher: "CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B".into(),
@@ -1159,6 +1188,18 @@ mod tests {
         let message = run_store_workflow(&mut fake, &absent(), &expectation()).unwrap();
         assert!(message.contains("复检成功"));
         assert_eq!(fake.calls, [Call::Primary, Call::Detect]);
+    }
+
+    #[test]
+    fn current_target_version_skips_external_install_work() {
+        let mut expected = expectation();
+        expected.target_version = Some("26.901.6511.0".into());
+        let current = installed("26.901.6511.0");
+        let mut fake = backend();
+
+        let message = run_store_workflow(&mut fake, &current, &expected).unwrap();
+        assert!(message.contains("已是最新版本"));
+        assert!(fake.calls.is_empty());
     }
 
     #[test]
@@ -1212,6 +1253,12 @@ mod tests {
         let mut fake = backend();
         fake.detection = Ok(installed("26.700.0.0"));
         assert!(run_store_workflow(&mut fake, &installed("26.900.0.0"), &expectation()).is_err());
+
+        let mut expected = expectation();
+        expected.target_version = Some("26.901.6511.0".into());
+        let mut fake = backend();
+        fake.detection = Ok(installed("26.900.9999.0"));
+        assert!(run_store_workflow(&mut fake, &absent(), &expected).is_err());
     }
 
     #[test]
@@ -1292,6 +1339,7 @@ mod tests {
             product: ProductId::ChatGpt,
             architecture: Architecture::X64,
             store_id: trust.store_id.clone().unwrap(),
+            latest_version: None,
         };
         let initial = Detection::absent("proof");
         let cancel = AtomicBool::new(false);
