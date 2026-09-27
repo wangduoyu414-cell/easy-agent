@@ -30,19 +30,19 @@
 
 ## 下载与安装
 
-当前版本为 [`v0.1.0-preview.4`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.4)：
+当前版本为 [`v0.1.0-preview.5`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.5)：
 
 | 系统 | 下载 | 已验证范围与限制 |
 | --- | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.4/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中五款客户端的真实首次安装、复检和独立启动均已通过；Claude 当前用户更新修复已完成真实 Windows 复检，EXE 未签名。 |
-| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.4/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
-| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.4/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包兼容 Intel/Apple Silicon；M1 原生构建与安装助手运行已验证，未公证，仅用于受控验证。 |
-| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.4/SHA256SUMS.txt) | 运行前核对文件摘要。 |
+| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中原有五款客户端的真实首次安装、复检和独立启动均已通过；Claude 当前用户更新修复已完成真实 Windows 复检；Clash Verge Rev 的下载、minisign 验签、UAC 提权安装与安装后复检已在真机走通，EXE 未签名。 |
+| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
+| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包兼容 Intel/Apple Silicon；M1 原生构建与安装助手运行已验证，未公证，仅用于受控验证。 |
+| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/SHA256SUMS.txt) | 运行前核对文件摘要。 |
 
 完整步骤、环境要求和排错见 [安装指南](docs/installation.md)。所有版本见 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 
 > [!NOTE]
-> 主分支已新增 ChatGPT Windows 最新版本识别：读取并校验 OpenAI 固定 MSIX 的版本、产品身份、架构和大小元数据；本机已是最新版时不再显示可点击的更新按钮。该修复晚于 `v0.1.0-preview.4` 制品，需后续 Release 重新构建后才会进入公开 EXE。
+> `v0.1.0-preview.5` 起新增第六款受管客户端 Clash Verge Rev（仅 Windows x64 启用），并包含 ChatGPT Windows 最新版本识别、EXE 安装器管理员提权回退和「奇米科技」品牌露出；界面中的官网链接固定指向 `wangduoyu.vip`。
 
 ## 项目简介
 

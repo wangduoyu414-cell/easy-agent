@@ -1391,8 +1391,8 @@ fn product_install_notice(
     }
 }
 
-// TODO(奇米): 官网地址确定后替换此占位 URL;该地址固定编译进应用,不接受远端下发
-const QIMI_WEBSITE_URL: &str = "https://qimi.example.com/";
+// 奇米科技官网地址固定编译进应用,不接受远端下发
+const QIMI_WEBSITE_URL: &str = "https://wangduoyu.vip/";
 
 const fn support_display_rank(support: &SupportState) -> u8 {
     match support {

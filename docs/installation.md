@@ -6,7 +6,7 @@
 
 | 目标 | 推荐路径 | 何时使用 |
 | --- | --- | --- |
-| 下载公开测试包 | [`v0.1.0-preview.4`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.4) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动，并完成 Claude 当前用户更新回归复检；EXE 未签名。未公证 DMG 只用于受控验证。 |
+| 下载公开测试包 | [`v0.1.0-preview.5`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.5) | Windows x64 已完成干净 Windows 11 五款客户端的真实首次安装、复检和启动，并完成 Claude 当前用户更新回归复检；EXE 未签名。未公证 DMG 只用于受控验证。 |
 | 日常使用 | 将来的 GitHub Release 已签名制品 | 仅当 Release 说明同时给出版本、SHA-256 和签名/公证状态时。 |
 | 评估当前代码 | `cargo run --release` | 开发者在受控本机直接运行。 |
 | 验证 Windows 包 | `packaging/build-windows.ps1` | 需要一个带 Windows 资源图标的便携 EXE。 |
@@ -38,7 +38,7 @@ Windows 刷新状态时，本机安装检测和联网获取最新版本是两个
 
 - Windows 图形界面需要 OpenGL 2.0 或更高版本。普通 Windows 10/11 实机通常由显卡驱动提供；缺少有效图形驱动的旧电脑或受限虚拟机可能无法启动。
 - Windows ARM64 当前只启用 Claude 和 ChatGPT；WorkBuddy、Hermes 和 CC Switch 会明确显示不可用，仍需 ARM64 真机完成整机验收。
-- 当前主分支可从固定 OpenAI MSIX 的受校验响应元数据读取 ChatGPT Windows 最新版本；本机版本相同或更高时会禁用更新按钮，网络暂时无法确认时显示“检查更新”。`v0.1.0-preview.4` 公开 EXE 早于该修复，需要后续 Release 重新构建后才包含此行为。
+- 应用可从固定 OpenAI MSIX 的受校验响应元数据读取 ChatGPT Windows 最新版本；本机版本相同或更高时会禁用更新按钮，网络暂时无法确认时显示“检查更新”。需要管理员权限的 EXE 安装器（如 Clash Verge Rev）会弹出 UAC 授权框，授权后继续。
 - Hermes Windows 不要求用户预装 Node、Python、Git 等开发工具，厂商 bootstrap 会自行准备；干净环境建议约 5 GB 可用内存、数 GB 磁盘空间和约 30 分钟安装时间。
 - WorkBuddy 使用可见厂商向导，用户需要选择安装范围、确认目录并完成向导；长时间停留在安装中时先检查厂商窗口是否等待操作。
 - macOS 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT。Hermes Intel 不支持，Apple Silicon bootstrap 已识别但当前禁用。
