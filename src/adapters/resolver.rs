@@ -14,7 +14,8 @@ use crate::core::{
 use super::{
     AdapterError, candidate_from_claude_redirect, candidate_from_verified_chatgpt_mirror,
     candidate_from_verified_claude_mirror, parse_cc_switch_manifest, parse_chatgpt_macos_appcast,
-    parse_chatgpt_windows_msix_headers, parse_hermes_homepage, parse_workbuddy_update,
+    parse_chatgpt_windows_msix_headers, parse_clash_verge_rev_manifest, parse_hermes_homepage,
+    parse_workbuddy_update,
 };
 
 #[derive(Debug, Error)]
@@ -125,6 +126,14 @@ pub fn resolve_install_plan(
                 ProductId::CcSwitch => {
                     let (_, source) = fetch_official_text(&client, &entry_url, trust)?;
                     Ok(parse_cc_switch_manifest(
+                        &source,
+                        platform.os,
+                        platform.architecture,
+                    )?)
+                }
+                ProductId::ClashVergeRev => {
+                    let (_, source) = fetch_official_text(&client, &entry_url, trust)?;
+                    Ok(parse_clash_verge_rev_manifest(
                         &source,
                         platform.os,
                         platform.architecture,

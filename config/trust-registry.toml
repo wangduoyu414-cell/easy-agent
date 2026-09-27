@@ -408,3 +408,77 @@ mirror_url_rules = [
 ]
 mirror_manifest_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQzAxRkUwNzhFOUE3Nzc3RApSV1I5ZDZmcGVPQWZ3TkNaamJtQzA4dG9ZSW5XM1E2WVpMOERSbTJPQlJPZUI4QkFaWERkQzZLcAo="
 mirror_max_stale_seconds = 604800
+
+[[entries]]
+product = "clash_verge_rev"
+os = "windows"
+architecture = "x64"
+enabled = true
+status_reason = "官方 GitHub Releases 更新清单、minisign 公钥、NSIS x64 安装包架构和注册表身份已固定"
+entry_urls = ["https://github.com/clash-verge-rev/clash-verge-rev/releases/download/updater/update.json"]
+url_rules = [
+  { host = "github.com", path_prefixes = ["/clash-verge-rev/clash-verge-rev/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["exe"]
+package_identity = "Clash Verge"
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEMyRjBCQkVGOUJEREYKUldUZnZmbStDeStNMHU5Mmo1N24xQXZwSVRYbXA2NUpzZE5oVzlqeS9Bc0t6RVV4MmtwVjBZaHgK"
+windows_exe_machine = "x86"
+postinstall_executable = "clash-verge.exe"
+allow_trusted_update_when_management_unknown = true
+
+[[entries]]
+product = "clash_verge_rev"
+os = "windows"
+architecture = "arm64"
+enabled = false
+status_reason = "官方清单已提供 ARM64 安装包，但尚未完成真机安装与复检"
+entry_urls = ["https://github.com/clash-verge-rev/clash-verge-rev/releases/download/updater/update.json"]
+url_rules = [
+  { host = "github.com", path_prefixes = ["/clash-verge-rev/clash-verge-rev/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["exe"]
+package_identity = "Clash Verge"
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEMyRjBCQkVGOUJEREYKUldUZnZmbStDeStNMHU5Mmo1N24xQXZwSVRYbXA2NUpzZE5oVzlqeS9Bc0t6RVV4MmtwVjBZaHgK"
+windows_exe_machine = "x86"
+postinstall_executable = "clash-verge.exe"
+
+[[entries]]
+product = "clash_verge_rev"
+os = "macos"
+architecture = "x64"
+enabled = false
+status_reason = "macOS Bundle 身份、Developer Team ID 与公证链尚未完成取证"
+entry_urls = ["https://github.com/clash-verge-rev/clash-verge-rev/releases/download/updater/update.json"]
+url_rules = [
+  { host = "github.com", path_prefixes = ["/clash-verge-rev/clash-verge-rev/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["tar_gz"]
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEMyRjBCQkVGOUJEREYKUldUZnZmbStDeStNMHU5Mmo1N24xQXZwSVRYbXA2NUpzZE5oVzlqeS9Bc0t6RVV4MmtwVjBZaHgK"
+macos_install_strategy = "direct_app_bundle"
+macos_application_name = "Clash Verge.app"
+macos_bundle_id = "io.github.clash-verge-rev.clash-verge-rev"
+
+[[entries]]
+product = "clash_verge_rev"
+os = "macos"
+architecture = "arm64"
+enabled = false
+status_reason = "macOS Bundle 身份、Developer Team ID 与公证链尚未完成取证"
+entry_urls = ["https://github.com/clash-verge-rev/clash-verge-rev/releases/download/updater/update.json"]
+url_rules = [
+  { host = "github.com", path_prefixes = ["/clash-verge-rev/clash-verge-rev/releases/"] },
+  { host = "release-assets.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] },
+  { host = "objects.githubusercontent.com", path_prefixes = ["/github-production-release-asset/"] }
+]
+package_kinds = ["tar_gz"]
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEMyRjBCQkVGOUJEREYKUldUZnZmbStDeStNMHU5Mmo1N24xQXZwSVRYbXA2NUpzZE5oVzlqeS9Bc0t6RVV4MmtwVjBZaHgK"
+macos_install_strategy = "direct_app_bundle"
+macos_application_name = "Clash Verge.app"
+macos_bundle_id = "io.github.clash-verge-rev.clash-verge-rev"
+

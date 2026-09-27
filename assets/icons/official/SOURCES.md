@@ -8,7 +8,8 @@
 | `workbuddy.png` | 由上述 `workbuddy.svg` 使用 Microsoft Edge SVG 渲染器按 4× 比例机械栅格化 | 应用运行时使用的 160×160 PNG | `cc719e9df3edbcc09c0ea3f29fc22e18308d955299d9d36b1c6bee43ed234a36` |
 | `hermes.png` | `https://raw.githubusercontent.com/NousResearch/hermes-agent/main/apps/desktop/assets/icon.png` | Nous Research 官方仓库桌面客户端图标 | `d60d164e24fdcf6532133b8ea43c77a201e4b9e9dbc396187b58d51d8590ef52` |
 | `cc-switch.png` | `https://raw.githubusercontent.com/farion1231/cc-switch/main/src-tauri/icons/icon.png` | CC Switch 官方仓库当前 Tauri 应用图标 | `04225b1b9c54569ec1ec850ad9f1c9f33ca4f286dab001a3392c0460deb342e5` |
-| `claude.png` | 官方 Windows 包 `Claude_1.24012.1.0_x64__pzs8sxrjxfjjc/app/resources/ion-dist/images/claude_app_icon.png` | 从本机已验证的 Anthropic MSIX 包逐字节提取 | `c7b5642f810adfba78781592d9dec18d7eb376c7ebf403c4d882fb9d39f65408` |
+| `claude.png` | 官方 Windows 包 `Claude_2.9939.2.0_x64__pzs8sxrjxfjjc/assets/Square44x44Logo.scale-400.png` | 从本机经 easy agent 验证下载的 Anthropic MSIX 包逐字节提取（当前橙底白星视觉） | `c2f59280e248f1680c4777b85db80c4e4967d288fc74859ac906a58ae43bd2fb` |
 | `chatgpt.png` | 官方 Windows 包 `OpenAI.Codex_26.721.11231.0_x64__2p2nqsd0c76g0/assets/Square44x44Logo.targetsize-256_altform-lightunplated.png` | 从本机已验证的新 ChatGPT/Codex 统一应用包逐字节提取 | `b45359d98553406d60c45e699cbe80de6fe733d51661a317ca37b41632b58823` |
+| `clash-verge-rev.png` | `https://raw.githubusercontent.com/clash-verge-rev/clash-verge-rev/dev/src-tauri/icons/icon.png` | Clash Verge Rev 官方仓库当前 Tauri 应用图标（512×512） | `ee04739a049564e34c7fee4fcc649f6dd195598c645bf061c1696e3099d67b08` |
 
 更新图标时必须重新从对应官方源取证、更新哈希并进行界面截图复检。

@@ -214,6 +214,7 @@ fn parse_product(value: &str) -> Result<ProductId, String> {
         "cc_switch" | "cc-switch" => Ok(ProductId::CcSwitch),
         "claude" => Ok(ProductId::Claude),
         "chatgpt" | "chat_gpt" | "chat-gpt" => Ok(ProductId::ChatGpt),
+        "clash_verge_rev" | "clash-verge-rev" => Ok(ProductId::ClashVergeRev),
         _ => Err(usage("unknown product")),
     }
 }

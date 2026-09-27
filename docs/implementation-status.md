@@ -23,12 +23,12 @@
 
 ## 平台支持矩阵
 
-| 平台 | WorkBuddy | Hermes | CC Switch | Claude | ChatGPT | 整机验证状态 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Windows x64 | 启用 | 启用 | 启用 | 启用 | 启用 | 干净 Windows 11 五款真实首次安装、复检和启动通过 |
-| Windows ARM64 | 禁用 | 禁用 | 禁用 | 启用 | 启用 | 构建与静态制品检查通过；真机待验证 |
-| macOS Intel | 启用 | 不支持 | 启用 | 启用 | 启用 | 直接应用包链与 Intel 验证制品启动通过；正式公证待完成 |
-| macOS Apple Silicon | 启用 | bootstrap 禁用 | 启用 | 启用 | 启用 | M1 原生构建与安装助手界面通过；客户端完整使用矩阵未完成 |
+| 平台 | WorkBuddy | Hermes | CC Switch | Claude | ChatGPT | Clash Verge Rev | 整机验证状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Windows x64 | 启用 | 启用 | 启用 | 启用 | 启用 | 启用（干净机安装待验证） | 干净 Windows 11 原有五款真实首次安装、复检和启动通过 |
+| Windows ARM64 | 禁用 | 禁用 | 禁用 | 启用 | 启用 | 禁用 | 构建与静态制品检查通过；真机待验证 |
+| macOS Intel | 启用 | 不支持 | 启用 | 启用 | 启用 | 禁用（身份取证未完成） | 直接应用包链与 Intel 验证制品启动通过；正式公证待完成 |
+| macOS Apple Silicon | 启用 | bootstrap 禁用 | 启用 | 启用 | 启用 | 禁用（身份取证未完成） | M1 原生构建与安装助手界面通过；客户端完整使用矩阵未完成 |
 
 支持状态的权威代码来源是 [`config/trust-registry.toml`](../config/trust-registry.toml)。远端元数据只能在该文件定义的边界内提供版本和地址，不能扩大信任范围。
 

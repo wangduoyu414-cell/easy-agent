@@ -5,8 +5,8 @@
 <h1 align="center">easy agent</h1>
 
 <p align="center">
-  面向五款固定 AI 桌面客户端的安全安装助手<br />
-  <sub>A fail-closed installer assistant for five AI desktop clients.</sub>
+  面向六款固定桌面客户端的安全安装助手<br />
+  <sub>A fail-closed installer assistant for six fixed desktop clients.</sub>
 </p>
 
 <p align="center">
@@ -46,7 +46,7 @@
 
 ## 项目简介
 
-`easy agent` 只管理 WorkBuddy、Hermes Agent、CC Switch、Claude Desktop 和 ChatGPT。它不是通用软件管家，也不执行网页返回的脚本；官方入口、包类型、签名主体、Bundle/Package 身份和架构规则均固定在应用内，证据不足时停止安装。
+`easy agent` 只管理 WorkBuddy、Hermes Agent、CC Switch、Claude Desktop、ChatGPT 和 Clash Verge Rev。它不是通用软件管家，也不执行网页返回的脚本；官方入口、包类型、签名主体、Bundle/Package 身份和架构规则均固定在应用内，证据不足时停止安装。
 
 | 能力 | 说明 |
 | --- | --- |
@@ -77,7 +77,7 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 
 | 平台 | 当前启用范围 | 当前结论 |
 | --- | --- | --- |
-| Windows x64 | WorkBuddy、Hermes、CC Switch、Claude、ChatGPT | 干净 Windows 11 中五款真实首次安装、复检和启动通过；Windows 10 中 CC Switch 真实安装通过。更新、账号业务和少数故障场景尚未全部覆盖。 |
+| Windows x64 | WorkBuddy、Hermes、CC Switch、Claude、ChatGPT、Clash Verge Rev | 干净 Windows 11 中原有五款真实首次安装、复检和启动通过；Windows 10 中 CC Switch 真实安装通过。Clash Verge Rev 已完成官方清单、minisign 签名与安装器合同取证，干净机真实安装待做。更新、账号业务和少数故障场景尚未全部覆盖。 |
 | Windows ARM64 | Claude、ChatGPT | 单文件 EXE、PE 架构、图标和版本资源已验证；WorkBuddy、Hermes、CC Switch 仍禁用，整机使用需 ARM64 真机验证。 |
 | macOS Intel | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes 不支持 | 四款直接应用包的下载、Apple 身份、临时安装、更新和回滚链已验证；验证 DMG 未公证。 |
 | macOS Apple Silicon | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes bootstrap 禁用 | ARM64/Universal 包身份和架构链已验证；仍需 Apple Silicon 真机启动与使用验收。 |
@@ -94,7 +94,7 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 
 ## 安全边界
 
-- 只管理五款固定客户端；远端响应不能新增主机、包类型、签名主体或产品身份。
+- 只管理六款固定客户端；远端响应不能新增主机、包类型、签名主体或产品身份。
 - 不执行服务器返回的 PowerShell、Shell 或安装参数；平台命令由本地编译代码构造。
 - 下载在私有临时目录完成并限制重定向、文件名和大小；安装始终使用已绑定的私有副本。
 - Windows 验证 Authenticode、AppX/MSIX 身份和 PE 架构；macOS 验证 Bundle ID、Developer Team ID、Mach-O 架构、codesign 和 Gatekeeper。
@@ -109,6 +109,7 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 | CC Switch | x64 官方签名更新清单、minisign 和 MSI | Intel/Apple Silicon 签名归档、minisign 和 `.app` 复检 |
 | Claude Desktop | x64/ARM64 官方完整 MSIX；明确不可用时使用同版本签名回退 | Intel/Apple Silicon Universal DMG；明确不可用时使用同版本签名回退 |
 | ChatGPT | x64/ARM64 固定微软安装器；明确分发失败时使用官方完整 MSIX 与离线许可证 | Intel/Apple Silicon 官方 Sparkle appcast 与 ZIP；明确不可用时使用签名回退 |
+| Clash Verge Rev | x64 官方 GitHub 更新清单、minisign 签名与 NSIS 注册表身份复检 | 禁用，Bundle 身份与 Team ID 取证未完成 |
 
 “支持”表示对应安全合同已启用，不代表正式发布签名、真机或账号业务测试已经全部完成。
 

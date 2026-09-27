@@ -135,7 +135,12 @@ impl InstallerApp {
     fn spawn_windows_full_scan(&self) {
         for products in [
             vec![ProductId::Claude, ProductId::ChatGpt],
-            vec![ProductId::WorkBuddy, ProductId::Hermes, ProductId::CcSwitch],
+            vec![
+                ProductId::WorkBuddy,
+                ProductId::Hermes,
+                ProductId::CcSwitch,
+                ProductId::ClashVergeRev,
+            ],
         ] {
             let sender = self.event_sender.clone();
             let platform = self.platform.clone();
@@ -549,11 +554,20 @@ impl eframe::App for InstallerApp {
                                         .color(Color32::from_rgb(18, 22, 29)),
                                 );
                                 ui.add_space(4.0);
-                                ui.label(
-                                    RichText::new("常用AI客户端  一键安装  官方来源")
-                                        .size(14.0)
-                                        .color(Color32::from_rgb(92, 99, 110)),
-                                );
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 0.0;
+                                    ui.hyperlink_to(
+                                        RichText::new("奇米科技")
+                                            .size(14.0)
+                                            .color(Color32::from_rgb(61, 111, 255)),
+                                        QIMI_WEBSITE_URL,
+                                    );
+                                    ui.label(
+                                        RichText::new(" · 常用桌面客户端  一键安装  官方来源")
+                                            .size(14.0)
+                                            .color(Color32::from_rgb(92, 99, 110)),
+                                    );
+                                });
                             });
                         });
                     });
@@ -1377,6 +1391,9 @@ fn product_install_notice(
     }
 }
 
+// TODO(奇米): 官网地址确定后替换此占位 URL;该地址固定编译进应用,不接受远端下发
+const QIMI_WEBSITE_URL: &str = "https://qimi.example.com/";
+
 const fn support_display_rank(support: &SupportState) -> u8 {
     match support {
         SupportState::Ready => 0,
@@ -1515,12 +1532,16 @@ fn draw_product_icon(ui: &mut egui::Ui, product: ProductId) {
         ProductId::ChatGpt => egui::include_image!("../assets/icons/official/chatgpt.png"),
         ProductId::WorkBuddy => egui::include_image!("../assets/icons/official/workbuddy.png"),
         ProductId::CcSwitch => egui::include_image!("../assets/icons/official/cc-switch.png"),
+        ProductId::ClashVergeRev => {
+            egui::include_image!("../assets/icons/official/clash-verge-rev.png")
+        }
     };
     let visual_size = match product {
         ProductId::Hermes => 34.0,
         ProductId::Claude => 38.0,
         ProductId::ChatGpt | ProductId::WorkBuddy => 40.0,
         ProductId::CcSwitch => 37.0,
+        ProductId::ClashVergeRev => 38.0,
     };
     let (rect, _) = ui.allocate_exact_size(egui::vec2(44.0, 44.0), egui::Sense::hover());
     ui.painter()

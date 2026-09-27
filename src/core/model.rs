@@ -11,15 +11,17 @@ pub enum ProductId {
     CcSwitch,
     Claude,
     ChatGpt,
+    ClashVergeRev,
 }
 
 impl ProductId {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Hermes,
         Self::Claude,
         Self::ChatGpt,
         Self::WorkBuddy,
         Self::CcSwitch,
+        Self::ClashVergeRev,
     ];
 
     pub const fn key(self) -> &'static str {
@@ -29,6 +31,7 @@ impl ProductId {
             Self::CcSwitch => "cc_switch",
             Self::Claude => "claude",
             Self::ChatGpt => "chatgpt",
+            Self::ClashVergeRev => "clash_verge_rev",
         }
     }
 
@@ -39,6 +42,7 @@ impl ProductId {
             Self::CcSwitch => "CC Switch",
             Self::Claude => "Claude Desktop",
             Self::ChatGpt => "ChatGPT",
+            Self::ClashVergeRev => "Clash Verge Rev",
         }
     }
 }

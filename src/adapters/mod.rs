@@ -1,5 +1,6 @@
 mod cc_switch;
 mod chatgpt;
+mod clash_verge_rev;
 mod claude;
 mod hermes;
 mod resolver;
@@ -10,6 +11,7 @@ pub use chatgpt::{
     candidate_from_verified_chatgpt_mirror, parse_chatgpt_macos_appcast,
     parse_chatgpt_windows_msix_headers,
 };
+pub use clash_verge_rev::parse_clash_verge_rev_manifest;
 pub use claude::{candidate_from_claude_redirect, candidate_from_verified_claude_mirror};
 pub use hermes::parse_hermes_homepage;
 pub use resolver::{

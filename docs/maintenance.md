@@ -7,7 +7,7 @@
 ## 日常检查
 
 1. 运行 `cargo test --all-targets` 和 `cargo clippy --all-targets -- -D warnings`。
-2. 启动开发版，确认五个适配器的当前官方版本解析结果。
+2. 启动开发版，确认六个适配器的当前官方版本解析结果。
 3. 对解析失败的产品只更新其独立 adapter fixture，不修改共享安全边界来“兼容所有情况”。
 4. 检查 `config/trust-registry.toml` 中目标平台是否仍保持正确 enabled/disabled 状态。
 

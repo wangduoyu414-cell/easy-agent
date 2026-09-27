@@ -1,8 +1,8 @@
 use easy_agent::adapters::{
     candidate_from_claude_redirect, candidate_from_verified_claude_mirror,
-    parse_cc_switch_manifest, parse_chatgpt_macos_appcast, parse_hermes_homepage,
-    parse_workbuddy_update, resolve_install_plan, resolve_microsoft_store_latest_version,
-    resolve_verified_download_fallback,
+    parse_cc_switch_manifest, parse_chatgpt_macos_appcast, parse_clash_verge_rev_manifest,
+    parse_hermes_homepage, parse_workbuddy_update, resolve_install_plan,
+    resolve_microsoft_store_latest_version, resolve_verified_download_fallback,
 };
 use easy_agent::core::{
     Architecture, ArtifactSource, InstallPlan, OperatingSystem, PackageKind, PlatformInfo,
@@ -34,6 +34,45 @@ fn parses_hermes_official_homepage_contract() {
     assert_eq!(
         candidate.download_url.host_str(),
         Some("hermes-assets.nousresearch.com")
+    );
+}
+
+#[test]
+fn maps_clash_verge_rev_manifest_without_guessing() {
+    let source = include_str!("fixtures/clash_verge_rev/update.json");
+    let x64 = parse_clash_verge_rev_manifest(source, OperatingSystem::Windows, Architecture::X64)
+        .unwrap();
+    assert_eq!(x64.product, ProductId::ClashVergeRev);
+    assert_eq!(x64.version, "2.5.6");
+    assert_eq!(x64.package_kind, PackageKind::Exe);
+    assert!(x64.download_url.path().ends_with("x64-setup.exe"));
+    assert!(x64.detached_signature.is_some());
+    let arm64 =
+        parse_clash_verge_rev_manifest(source, OperatingSystem::Windows, Architecture::Arm64)
+            .unwrap();
+    assert!(arm64.download_url.path().ends_with("arm64-setup.exe"));
+    let macos = parse_clash_verge_rev_manifest(source, OperatingSystem::MacOs, Architecture::Arm64)
+        .unwrap();
+    assert_eq!(macos.package_kind, PackageKind::TarGz);
+}
+
+#[test]
+fn rejects_clash_verge_rev_url_that_disagrees_with_manifest_version() {
+    let source = include_str!("fixtures/clash_verge_rev/update.json").replace(
+        "/download/v2.5.6/Clash.Verge_2.5.6_x64-setup.exe",
+        "/download/v2.5.5/Clash.Verge_2.5.5_x64-setup.exe",
+    );
+    assert!(
+        parse_clash_verge_rev_manifest(&source, OperatingSystem::Windows, Architecture::X64)
+            .is_err()
+    );
+    assert!(
+        parse_clash_verge_rev_manifest(
+            "{\"name\":\"latest\",\"platforms\":{}}",
+            OperatingSystem::Windows,
+            Architecture::X64
+        )
+        .is_err()
     );
 }
 

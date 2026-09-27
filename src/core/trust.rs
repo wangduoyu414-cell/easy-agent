@@ -495,18 +495,23 @@ impl TrustRegistry {
                 ));
             }
 
-            if entry.allow_trusted_update_when_management_unknown
-                && (entry.product != ProductId::CcSwitch
-                    || entry.package_kinds.as_slice() != [PackageKind::Msi]
-                    || entry.package_identity.as_deref() != Some("CC Switch"))
-            {
-                return Err(TrustRegistryError::Invalid(
-                    key.0.into(),
-                    key.1.into(),
-                    key.2.into(),
-                    "unknown-management update policy is limited to the pinned CC Switch MSI identity"
-                        .into(),
-                ));
+            if entry.allow_trusted_update_when_management_unknown {
+                let is_cc_switch_msi = entry.product == ProductId::CcSwitch
+                    && entry.package_kinds.as_slice() == [PackageKind::Msi]
+                    && entry.package_identity.as_deref() == Some("CC Switch");
+                let is_clash_verge_rev_nsis = entry.product == ProductId::ClashVergeRev
+                    && entry.package_kinds.as_slice() == [PackageKind::Exe]
+                    && entry.package_identity.as_deref() == Some("Clash Verge")
+                    && entry.updater_public_key.is_some();
+                if !is_cc_switch_msi && !is_clash_verge_rev_nsis {
+                    return Err(TrustRegistryError::Invalid(
+                        key.0.into(),
+                        key.1.into(),
+                        key.2.into(),
+                        "unknown-management update policy is limited to the pinned CC Switch MSI and Clash Verge Rev NSIS identities"
+                            .into(),
+                    ));
+                }
             }
 
             if entry.enabled {

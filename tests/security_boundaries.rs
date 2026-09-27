@@ -31,6 +31,7 @@ fn embedded_registry_enables_the_configured_windows_x64_strategies() {
         ProductId::CcSwitch,
         ProductId::Claude,
         ProductId::ChatGpt,
+        ProductId::ClashVergeRev,
     ] {
         let entry = registry
             .find(product, OperatingSystem::Windows, Architecture::X64)
@@ -104,6 +105,34 @@ fn embedded_registry_enables_the_configured_windows_x64_strategies() {
         chatgpt.web_installer_signer_subject.as_deref(),
         Some("Microsoft Corporation")
     );
+    let clash_verge_rev = registry
+        .find(
+            ProductId::ClashVergeRev,
+            OperatingSystem::Windows,
+            Architecture::X64,
+        )
+        .unwrap();
+    assert_eq!(clash_verge_rev.package_kinds.as_slice(), [PackageKind::Exe]);
+    assert_eq!(
+        clash_verge_rev.entry_urls.as_slice(),
+        [
+            "https://github.com/clash-verge-rev/clash-verge-rev/releases/download/updater/update.json"
+        ]
+    );
+    assert_eq!(
+        clash_verge_rev.package_identity.as_deref(),
+        Some("Clash Verge")
+    );
+    assert_eq!(
+        clash_verge_rev.windows_exe_machine,
+        Some(WindowsPeMachine::X86)
+    );
+    assert_eq!(
+        clash_verge_rev.postinstall_executable.as_deref(),
+        Some("clash-verge.exe")
+    );
+    assert!(clash_verge_rev.updater_public_key.is_some());
+    assert!(clash_verge_rev.allow_trusted_update_when_management_unknown);
     assert!(
         registry
             .entries
@@ -140,6 +169,20 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
         registry.support_state(ProductId::Hermes, OperatingSystem::MacOs, Architecture::X64),
         easy_agent::core::SupportState::Unsupported(_)
     ));
+    for architecture in [Architecture::X64, Architecture::Arm64] {
+        let clash_verge_rev = registry
+            .find(
+                ProductId::ClashVergeRev,
+                OperatingSystem::MacOs,
+                architecture,
+            )
+            .unwrap();
+        assert!(
+            !clash_verge_rev.enabled,
+            "Clash Verge Rev macOS stays disabled until bundle identity evidence exists"
+        );
+        assert!(clash_verge_rev.updater_public_key.is_some());
+    }
     let chatgpt = registry
         .find(
             ProductId::ChatGpt,
@@ -668,7 +711,7 @@ store_id = "9PLM9XGG6VKS"
 }
 
 #[test]
-fn unknown_management_override_is_limited_to_the_pinned_cc_switch_msi() {
+fn unknown_management_override_is_limited_to_pinned_cc_switch_and_clash_verge_rev() {
     let wrong_product = r#"
 schema_version = 1
 [[entries]]
@@ -701,6 +744,33 @@ package_identity = "CC Switch"
 allow_trusted_update_when_management_unknown = true
 "#;
     assert!(TrustRegistry::parse(store_distribution).is_err());
+
+    let clash_verge_rev_nsis = r#"
+schema_version = 1
+[[entries]]
+product = "clash_verge_rev"
+os = "windows"
+architecture = "x64"
+enabled = false
+status_reason = "fixture"
+entry_urls = []
+url_rules = []
+package_kinds = ["exe"]
+package_identity = "Clash Verge"
+updater_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEMyRjBCQkVGOUJEREYKUldUZnZmbStDeStNMHU5Mmo1N24xQXZwSVRYbXA2NUpzZE5oVzlqeS9Bc0t6RVV4MmtwVjBZaHgK"
+allow_trusted_update_when_management_unknown = true
+"#;
+    assert!(TrustRegistry::parse(clash_verge_rev_nsis).is_ok());
+
+    let clash_verge_rev_wrong_identity = clash_verge_rev_nsis.replace(
+        "package_identity = \"Clash Verge\"",
+        "package_identity = \"Clash\"",
+    );
+    assert!(TrustRegistry::parse(&clash_verge_rev_wrong_identity).is_err());
+
+    let clash_verge_rev_without_key =
+        clash_verge_rev_nsis.replace("updater_public_key", "disabled_updater_public_key");
+    assert!(TrustRegistry::parse(&clash_verge_rev_without_key).is_err());
 }
 
 #[test]

@@ -2006,6 +2006,7 @@ mod tests {
             "cc_switch" => ProductId::CcSwitch,
             "claude" => ProductId::Claude,
             "chatgpt" => ProductId::ChatGpt,
+            "clash_verge_rev" => ProductId::ClashVergeRev,
             value => panic!("unsupported proof product: {value}"),
         };
         let architecture = match std::env::var("EASY_AGENT_MACOS_PROOF_ARCHITECTURE")

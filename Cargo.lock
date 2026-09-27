@@ -919,6 +919,7 @@ dependencies = [
  "crossbeam-channel",
  "ed25519-dalek",
  "eframe",
+ "egui-winit",
  "egui_extras",
  "flate2",
  "hex",

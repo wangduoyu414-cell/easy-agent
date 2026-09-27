@@ -16,7 +16,8 @@ use base64::Engine;
 use regex::Regex;
 use serde::Deserialize;
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_CANCELLED, GetLastError, S_OK, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    CloseHandle, ERROR_CANCELLED, ERROR_ELEVATION_REQUIRED, GetLastError, S_OK, WAIT_OBJECT_0,
+    WAIT_TIMEOUT,
 };
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
@@ -39,6 +40,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_INSTALLER_ERROR_CHARS: usize = 4096;
 const MSIX_ERROR_MARKER: &str = "EASY_AGENT_MSIX_ERROR";
 const CLAUDE_PROVISION_TIMEOUT: Duration = Duration::from_secs(45 * 60);
+const ELEVATED_INSTALL_TIMEOUT: Duration = Duration::from_secs(45 * 60);
 const DETECTION_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub fn downloads_directory() -> Result<PathBuf, String> {
@@ -92,7 +94,7 @@ $product = $env:EASY_AGENT_PRODUCT
 $scope = [string]$env:EASY_AGENT_DETECTION_SCOPE
 $allProducts = [string]::IsNullOrWhiteSpace($product)
 $includeAppx = $scope -ne 'registry' -and ($allProducts -or $product -eq 'claude' -or $product -eq 'chatgpt')
-$includeRegistry = $scope -ne 'appx' -and ($allProducts -or $product -eq 'workbuddy' -or $product -eq 'hermes' -or $product -eq 'cc_switch')
+$includeRegistry = $scope -ne 'appx' -and ($allProducts -or $product -eq 'workbuddy' -or $product -eq 'hermes' -or $product -eq 'cc_switch' -or $product -eq 'clash_verge_rev')
 
 $appxPackages = @()
 $appxError = $null
@@ -138,12 +140,13 @@ $registryError = $null
 if ($includeRegistry) {
   try {
     $tokens = if ($allProducts) {
-      @('WorkBuddy', 'Hermes', 'Hermes Agent', 'CC Switch', 'CCSwitch')
+      @('WorkBuddy', 'Hermes', 'Hermes Agent', 'CC Switch', 'CCSwitch', 'Clash Verge')
     } else {
       switch ($product) {
         'workbuddy' { @('WorkBuddy') }
         'hermes' { @('Hermes', 'Hermes Agent') }
         'cc_switch' { @('CC Switch', 'CCSwitch') }
+        'clash_verge_rev' { @('Clash Verge') }
         default { @() }
       }
     }
@@ -427,7 +430,10 @@ pub fn detect_products(
     let contains_registry = products.iter().any(|product| {
         matches!(
             product,
-            ProductId::WorkBuddy | ProductId::Hermes | ProductId::CcSwitch
+            ProductId::WorkBuddy
+                | ProductId::Hermes
+                | ProductId::CcSwitch
+                | ProductId::ClashVergeRev
         )
     });
     let scope = match (contains_appx, contains_registry) {
@@ -831,6 +837,13 @@ fn matches_registry_entry(product: ProductId, entry: &RegistryEntryOutput) -> bo
         ProductId::ChatGpt => {
             entry.display_name.eq_ignore_ascii_case("ChatGPT")
                 || entry.display_name.eq_ignore_ascii_case("OpenAI.Codex")
+        }
+        ProductId::ClashVergeRev => {
+            matches_versioned_display_name(&entry.display_name, "Clash Verge")
+                && entry
+                    .publisher
+                    .as_deref()
+                    .is_some_and(|publisher| publisher.eq_ignore_ascii_case("Clash Verge Rev"))
         }
     }
 }
@@ -1238,12 +1251,12 @@ fn shell_execute_elevated_wait(
             Ok(ElevatedProcessOutcome::Cancelled)
         } else {
             Err(format!(
-                "cannot start elevated Claude deployment, Windows error {error}"
+                "cannot start elevated installer, Windows error {error}"
             ))
         };
     }
     if info.hProcess.is_null() {
-        return Err("elevated Claude deployment returned no process handle".into());
+        return Err("elevated installer returned no process handle".into());
     }
     let milliseconds = timeout.as_millis().min(u32::MAX as u128) as u32;
     // SAFETY: hProcess is a valid handle returned by ShellExecuteExW.
@@ -1257,7 +1270,7 @@ fn shell_execute_elevated_wait(
         let error = unsafe { GetLastError() };
         unsafe { CloseHandle(info.hProcess) };
         return Err(format!(
-            "cannot wait for elevated Claude deployment, Windows error {error}"
+            "cannot wait for elevated installer, Windows error {error}"
         ));
     }
     let mut exit_code = 0_u32;
@@ -1265,7 +1278,7 @@ fn shell_execute_elevated_wait(
     let success = unsafe { GetExitCodeProcess(info.hProcess, &mut exit_code) };
     unsafe { CloseHandle(info.hProcess) };
     if success == 0 {
-        return Err("cannot read elevated Claude deployment exit code".into());
+        return Err("cannot read elevated installer exit code".into());
     }
     Ok(ElevatedProcessOutcome::Exited(exit_code))
 }
@@ -1383,14 +1396,46 @@ pub fn execute_verified_installer(
     for (key, value) in &plan.environment {
         command.env(key, value);
     }
-    let status = command
-        .status()
-        .map_err(|error| format!("cannot start installer: {error}"))?;
+    let status = match command.status() {
+        Ok(status) => status,
+        Err(error) if error.raw_os_error() == Some(ERROR_ELEVATION_REQUIRED as i32) => {
+            return execute_elevated_installer(&plan, request.kind);
+        }
+        Err(error) => return Err(format!("cannot start installer: {error}")),
+    };
     let exit_code = status.code().unwrap_or(-1);
     let error_summary = known_installer_error(request.kind, exit_code);
     Ok(InstallerExecution {
         exit_code,
         error_summary,
+    })
+}
+
+fn execute_elevated_installer(
+    plan: &PlannedCommand,
+    kind: PackageKind,
+) -> Result<InstallerExecution, String> {
+    let outcome = shell_execute_elevated_wait(
+        Path::new(&plan.program),
+        &plan.arguments,
+        ELEVATED_INSTALL_TIMEOUT,
+    )?;
+    Ok(match outcome {
+        ElevatedProcessOutcome::Exited(exit_code) => {
+            let exit_code = exit_code as i32;
+            InstallerExecution {
+                exit_code,
+                error_summary: known_installer_error(kind, exit_code),
+            }
+        }
+        ElevatedProcessOutcome::Cancelled => InstallerExecution {
+            exit_code: ERROR_CANCELLED as i32,
+            error_summary: Some("已取消管理员授权，未运行安装程序".into()),
+        },
+        ElevatedProcessOutcome::TimedOut => InstallerExecution {
+            exit_code: -1,
+            error_summary: Some("安装程序等待超时；它可能仍在后台运行，请稍后刷新状态".into()),
+        },
     })
 }
 
@@ -1999,6 +2044,34 @@ if ([NativeConsoleProbe]::GetConsoleWindow() -ne [IntPtr]::Zero) { exit 42 }
         wrong_publisher.publisher = Some("Unrelated Publisher".into());
         assert!(!matches_registry_entry(
             ProductId::CcSwitch,
+            &wrong_publisher
+        ));
+    }
+
+    #[test]
+    fn clash_verge_rev_registry_rule_requires_display_name_and_publisher() {
+        let valid = RegistryEntryOutput {
+            display_name: "Clash Verge".into(),
+            version: Some("2.5.6".into()),
+            publisher: Some("Clash Verge Rev".into()),
+            install_location: None,
+            display_icon: None,
+            uninstall_string: None,
+            current_user: false,
+        };
+        assert!(matches_registry_entry(ProductId::ClashVergeRev, &valid));
+
+        let mut missing_publisher = valid.clone();
+        missing_publisher.publisher = None;
+        assert!(!matches_registry_entry(
+            ProductId::ClashVergeRev,
+            &missing_publisher
+        ));
+
+        let mut wrong_publisher = valid;
+        wrong_publisher.publisher = Some("Unrelated Publisher".into());
+        assert!(!matches_registry_entry(
+            ProductId::ClashVergeRev,
             &wrong_publisher
         ));
     }
