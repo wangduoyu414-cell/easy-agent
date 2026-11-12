@@ -305,3 +305,6 @@ pub fn execute_microsoft_store_install(
         "Microsoft Store installation is only available on Windows".into(),
     ))
 }
+
+#[cfg(target_os = "macos")]
+pub(crate) use macos::launch_hermes_setup;

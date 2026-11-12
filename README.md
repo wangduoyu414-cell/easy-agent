@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/branding/easy-agent-icon-512.png" width="132" alt="easy agent application icon" />
+  <img src="assets/branding/easy-agent-icon-512.png" width="132" alt="奇米智能助手 application icon" />
 </p>
 
-<h1 align="center">easy agent</h1>
+<h1 align="center">奇米智能助手</h1>
 
 <p align="center">
   面向六款固定桌面客户端的安全安装助手<br />
@@ -17,6 +17,7 @@
 </p>
 
 <p align="center">
+  <a href="https://www.wangduoyu.online/">奇米科技官网</a> ·
   <a href="#下载与安装">下载与安装</a> ·
   <a href="#工作方式">工作方式</a> ·
   <a href="#平台状态">平台状态</a> ·
@@ -26,27 +27,27 @@
 </p>
 
 > [!IMPORTANT]
-> `easy agent` 目前是测试预览版，不是已签名的正式发行版。Windows EXE 尚未做 Authenticode 签名，macOS DMG 尚未经过 Apple 公证。请勿关闭 Gatekeeper、删除 quarantine 或忽略系统签名警告来绕过验证。
+> `奇米智能助手` 目前是测试预览版，不是已签名的正式发行版。Windows EXE 尚未做 Authenticode 签名，macOS DMG 尚未经过 Apple 公证。请勿关闭 Gatekeeper、删除 quarantine 或忽略系统签名警告来绕过验证。
 
 ## 下载与安装
 
-当前版本为 [`v0.1.0-preview.5`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.5)：
+当前版本为 [`v0.1.0-preview.6`](https://github.com/wangduoyu414-cell/easy-agent/releases/tag/v0.1.0-preview.6)：
 
 | 系统 | 下载 | 已验证范围与限制 |
 | --- | --- | --- |
-| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中原有五款客户端的真实首次安装、复检和独立启动均已通过；Claude 当前用户更新修复已完成真实 Windows 复检；Clash Verge Rev 的下载、minisign 验签、UAC 提权安装与安装后复检已在真机走通，EXE 未签名。 |
-| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
-| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包兼容 Intel/Apple Silicon；M1 原生构建与安装助手运行已验证，未公证，仅用于受控验证。 |
-| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.5/SHA256SUMS.txt) | 运行前核对文件摘要。 |
+| Windows x64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.6/easy-agent-windows-x64.exe) | 干净 Windows 11 虚拟机中原有五款客户端的真实首次安装、复检和独立启动均已通过；Claude 当前用户更新修复已完成真实 Windows 复检；Clash Verge Rev 的下载、minisign 验签、UAC 提权安装与安装后复检已在真机走通，EXE 未签名。 |
+| Windows ARM64 | [下载 EXE](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.6/easy-agent-windows-arm64.exe) | 当前只启用 Claude 与 ChatGPT；构建和 PE 资源检查通过，仍需 ARM64 真机验收，EXE 未签名。 |
+| macOS Intel / Apple Silicon | [下载验证 DMG](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.6/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg) | Universal 验证包兼容 Intel/Apple Silicon；M1 原生构建与安装助手运行已验证，未公证，仅用于受控验证。 |
+| 完整性校验 | [下载 SHA-256](https://github.com/wangduoyu414-cell/easy-agent/releases/download/v0.1.0-preview.6/SHA256SUMS.txt) | 运行前核对文件摘要。 |
 
 完整步骤、环境要求和排错见 [安装指南](docs/installation.md)。所有版本见 [GitHub Releases](https://github.com/wangduoyu414-cell/easy-agent/releases)。
 
 > [!NOTE]
-> `v0.1.0-preview.5` 起新增第六款受管客户端 Clash Verge Rev（仅 Windows x64 启用），并包含 ChatGPT Windows 最新版本识别、EXE 安装器管理员提权回退和「奇米科技」品牌露出；界面中的官网链接固定指向 `wangduoyu.vip`。
+> 本版两端统一为「奇米智能助手」。Clash 支持 Mac 自动安装；Apple Silicon 上的 Hermes 自动打开官方安装向导，仍需用户确认。
 
 ## 项目简介
 
-`easy agent` 只管理 WorkBuddy、Hermes Agent、CC Switch、Claude Desktop、ChatGPT 和 Clash Verge Rev。它不是通用软件管家，也不执行网页返回的脚本；官方入口、包类型、签名主体、Bundle/Package 身份和架构规则均固定在应用内，证据不足时停止安装。
+`奇米智能助手` 只管理 WorkBuddy、Hermes Agent、CC Switch、Claude Desktop、ChatGPT 和 Clash Verge Rev。它不是通用软件管家，也不执行网页返回的脚本；官方入口、包类型、签名主体、Bundle/Package 身份和架构规则均固定在应用内，证据不足时停止安装。
 
 | 能力 | 说明 |
 | --- | --- |
@@ -79,12 +80,12 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 | --- | --- | --- |
 | Windows x64 | WorkBuddy、Hermes、CC Switch、Claude、ChatGPT、Clash Verge Rev | 干净 Windows 11 中原有五款真实首次安装、复检和启动通过；Windows 10 中 CC Switch 真实安装通过。Clash Verge Rev 已完成官方清单、minisign 签名与安装器合同取证，干净机真实安装待做。更新、账号业务和少数故障场景尚未全部覆盖。 |
 | Windows ARM64 | Claude、ChatGPT | 单文件 EXE、PE 架构、图标和版本资源已验证；WorkBuddy、Hermes、CC Switch 仍禁用，整机使用需 ARM64 真机验证。 |
-| macOS Intel | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes 不支持 | 四款直接应用包的下载、Apple 身份、临时安装、更新和回滚链已验证；验证 DMG 未公证。 |
-| macOS Apple Silicon | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes bootstrap 禁用 | ARM64/Universal 包身份和架构链已验证；仍需 Apple Silicon 真机启动与使用验收。 |
+| macOS Intel | WorkBuddy、CC Switch、Claude、ChatGPT；Clash 可自动安装；Hermes 不支持 | 四款直接应用包的下载、Apple 身份、临时安装、更新和回滚链已验证；验证 DMG 未公证。 |
+| macOS Apple Silicon | WorkBuddy、CC Switch、Claude、ChatGPT；Hermes 和 Clash 可自动安装安装包 | ARM64/Universal 包身份和架构链已验证；仍需 Apple Silicon 真机启动与使用验收。 |
 
 已知使用限制：
 
-- 2026-09-06 已修复 WorkBuddy 两种 Mac 架构的 Bundle ID 迁移，并验证当前官方包的临时安装与回滚。Hermes Mac 安装器默认追踪 main，缺少固定稳定版本与最终应用复检，继续禁用。Windows 当前包检查与关联影响见 [安装来源审计](evidence/distribution-source-audit-2026-09-06.md)。
+- 2026-09-06 已修复 WorkBuddy 两种 Mac 架构的 Bundle ID 迁移，并验证当前官方包的临时安装与回滚。Hermes Mac 安装器默认追踪 main，缺少固定稳定版本与最终应用复检，自动安装继续禁用。Windows 当前包检查与关联影响见 [安装来源审计](evidence/distribution-source-audit-2026-09-06.md)。
 - Hermes 官方正式版固定源码已在 M1 上构建并完成真实桌面/后端联调；该自建测试样本不替代官方签名安装器的验证，见[真实运行证据](evidence/hermes-fixed-source-runtime-2026-09-06.md)。
 - 图形界面需要 OpenGL 2.0 或更高版本；缺少可用图形驱动的旧电脑或受限虚拟机可能无法启动。
 - ChatGPT Windows 会从固定 OpenAI MSIX 的受校验响应元数据读取最新版本；本机版本相同或更高时显示“已是最新版本”并禁用更新按钮，网络暂时无法确认时才显示“检查更新”。
@@ -105,11 +106,11 @@ Windows：结构化安装命令     macOS：只读挂载或安全展开 → 原�
 | 客户端 | Windows | macOS |
 | --- | --- | --- |
 | WorkBuddy | x64 官方更新接口、腾讯签名和最终 EXE 复检 | Intel/Apple Silicon 官方 ZIP 与 Apple 身份复检 |
-| Hermes Agent | x64 官方 bootstrap，桌面与 runtime 状态分离 | Intel 不支持；Apple Silicon bootstrap 已识别但当前禁用 |
+| Hermes Agent | x64 官方 bootstrap，桌面与 runtime 状态分离 | Intel 无官方安装包；Apple Silicon 下载并验证官方 setup 后自动启动向导 |
 | CC Switch | x64 官方签名更新清单、minisign 和 MSI | Intel/Apple Silicon 签名归档、minisign 和 `.app` 复检 |
 | Claude Desktop | x64/ARM64 官方完整 MSIX；明确不可用时使用同版本签名回退 | Intel/Apple Silicon Universal DMG；明确不可用时使用同版本签名回退 |
 | ChatGPT | x64/ARM64 固定微软安装器；明确分发失败时使用官方完整 MSIX 与离线许可证 | Intel/Apple Silicon 官方 Sparkle appcast 与 ZIP；明确不可用时使用签名回退 |
-| Clash Verge Rev | x64 官方 GitHub 更新清单、minisign 签名与 NSIS 注册表身份复检 | 禁用，Bundle 身份与 Team ID 取证未完成 |
+| Clash Verge Rev | x64 官方 GitHub 更新清单、minisign 签名与 NSIS 注册表身份复检 | Intel/Apple Silicon 均可自动下载、验证、安装并复检稳定版应用 |
 
 “支持”表示对应安全合同已启用，不代表正式发布签名、真机或账号业务测试已经全部完成。
 

@@ -81,6 +81,54 @@ pub fn candidate_from_claude_redirect(
     })
 }
 
+/// Anthropic's macOS updater indexes ZIPs. The matching installer lives beside
+/// the ZIP on the official CDN; callers must confirm that exact DMG exists.
+pub(super) fn macos_dmg_from_release_index(source: &str) -> Result<Url, AdapterError> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Index {
+        current_release: String,
+        releases: Vec<Entry>,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Entry {
+        version: String,
+        update_to: Update,
+    }
+    #[derive(Deserialize)]
+    struct Update {
+        version: String,
+        url: String,
+    }
+
+    let index: Index = serde_json::from_str(source)?;
+    let version = index.current_release;
+    let invalid = || AdapterError::Contract("unexpected Claude macOS release index".into());
+    if !is_claude_release_version(&version, OperatingSystem::MacOs) {
+        return Err(invalid());
+    }
+    let mut matches = index
+        .releases
+        .iter()
+        .filter(|entry| entry.version == version);
+    let entry = matches.next().ok_or_else(invalid)?;
+    if matches.next().is_some() || entry.update_to.version != version {
+        return Err(invalid());
+    }
+    let prefix = format!("https://downloads.claude.ai/releases/darwin/universal/{version}/Claude-");
+    let hash = entry
+        .update_to
+        .url
+        .strip_prefix(&prefix)
+        .and_then(|name| name.strip_suffix(".zip"))
+        .ok_or_else(invalid)?;
+    if hash.len() != 40 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(invalid());
+    }
+    Ok(Url::parse(&format!("{prefix}{hash}.dmg"))?)
+}
+
 pub fn candidate_from_verified_claude_mirror(
     manifest_bytes: &[u8],
     signature_text: &str,
@@ -496,5 +544,27 @@ mirror_max_stale_seconds = 604800
             )
             .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod mac_index_tests {
+    use super::*;
+    #[test]
+    fn only_exact_same_release_official_sibling_is_eligible() {
+        let index = r#"{"currentRelease":"5.1231.2","releases":[{"version":"5.1231.2","updateTo":{"version":"5.1231.2","url":"https://downloads.claude.ai/releases/darwin/universal/5.1231.2/Claude-26912242b6649f3e503e012d9b7b9367d09c68e4.zip"}}]}"#;
+        assert_eq!(
+            macos_dmg_from_release_index(index).unwrap().as_str(),
+            "https://downloads.claude.ai/releases/darwin/universal/5.1231.2/Claude-26912242b6649f3e503e012d9b7b9367d09c68e4.dmg"
+        );
+        for bad in [
+            index.replace("downloads.claude.ai", "example.org"),
+            index.replace("/5.1231.2/", "/5.1231.1/"),
+            index.replace(".zip", ".zip?x"),
+            index.replace("26912242", "../"),
+            index.replacen("5.1231.2", "5.1231.1", 1),
+        ] {
+            assert!(macos_dmg_from_release_index(&bad).is_err());
+        }
     }
 }

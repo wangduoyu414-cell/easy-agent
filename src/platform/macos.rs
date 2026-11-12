@@ -643,6 +643,41 @@ fn verify_workbuddy_runtime_mutated_signature(
     ensure_command_success("WorkBuddy executable signature verification", &verification)
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn launch_hermes_setup(
+    download: &crate::core::DownloadResult,
+    trust: &TrustEntry,
+    arch: Architecture,
+) -> Result<(), String> {
+    if trust.product != ProductId::Hermes
+        || arch != Architecture::Arm64
+        || trust.macos_install_strategy != Some(MacOsInstallStrategy::VendorBootstrap)
+    {
+        return Err("不支持此安装器".into());
+    }
+    crate::core::verify_staged_identity(
+        download.private_root.path(),
+        &download.staged_path,
+        &download.identity,
+        None,
+    )
+    .map_err(|e| e.to_string())?;
+    with_prepared_app(&download.staged_path, PackageKind::Dmg, trust, |setup| {
+        inspect_app_bundle(setup, trust, Some(arch))?;
+        // Keep the verified read-only volume mounted until this instance exits.
+        let status = std::process::Command::new("/usr/bin/open")
+            .args(["-n", "-W"])
+            .arg(setup)
+            .status()
+            .map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("无法运行 Hermes 安装向导".into())
+        }
+    })
+}
+
 fn with_prepared_app<T>(
     artifact: &Path,
     kind: PackageKind,

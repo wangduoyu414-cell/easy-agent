@@ -12,7 +12,7 @@
 - ChatGPT Windows 会从固定 OpenAI MSIX 的响应元数据读取最新版本，并同时校验 Package Identity、目标架构、四段 AppX 版本和包大小；本机版本相同或更高时不再显示可点击的更新按钮。元数据暂时不可用时仍保留微软安装器安装能力。
 - 下载进度按约 1 MiB 增量合并，并保证起点和完成点仍会通知，避免小块网络读取触发数千次界面刷新和日志/测试输出。
 - Windows ARM64 当前只启用 Claude 和 ChatGPT。EXE 构建、PE 架构、图标和版本资源已通过检查，但仍缺少 ARM64 真机安装矩阵。
-- macOS Intel/Apple Silicon 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT 的直接应用包链。Hermes Intel 明确不支持；Hermes Apple Silicon 只识别 vendor bootstrap，当前禁用。
+- macOS Intel/Apple Silicon 当前启用 WorkBuddy、CC Switch、Claude 和 ChatGPT 的直接应用包链。Hermes Intel 明确不支持；Hermes Apple Silicon 会启动已验证的 setup；Clash 两种 Mac 架构都使用直接应用包安装与复检。
 - Hermes 新增 Windows/macOS 共用的[只读安装诊断](hermes-diagnostics.md)，观察布局、声明版本、Git HEAD 和安装标记一致性。该工具尚不用于 GUI 安装成功判定，不验证运行健康或源码完整性。
 - Mac 另有最终桌面 Bundle/ARM64/codesign 诊断，以及绑定实际 Python 进程、工作目录、端口和版本的后端存活探针。它们仍是独立诊断入口，不证明厂商来源、模型访问或整体安装成功；Windows 对应系统检查待实现。
 - Hermes Mac 正式扫描与详情已接入只读观察。官方正式版固定源码已在 M1 上完成锁定依赖、ARM64 桌面构建、真实后端健康和同机前后端认证联调；这是自建测试样本，官方 DMG 一键安装仍未闭合。详见[固定源码与真实运行验证](../evidence/hermes-fixed-source-runtime-2026-09-06.md)。
@@ -27,8 +27,8 @@
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Windows x64 | 启用 | 启用 | 启用 | 启用 | 启用 | 启用（干净机安装待验证） | 干净 Windows 11 原有五款真实首次安装、复检和启动通过 |
 | Windows ARM64 | 禁用 | 禁用 | 禁用 | 启用 | 启用 | 禁用 | 构建与静态制品检查通过；真机待验证 |
-| macOS Intel | 启用 | 不支持 | 启用 | 启用 | 启用 | 禁用（身份取证未完成） | 直接应用包链与 Intel 验证制品启动通过；正式公证待完成 |
-| macOS Apple Silicon | 启用 | bootstrap 禁用 | 启用 | 启用 | 启用 | 禁用（身份取证未完成） | M1 原生构建与安装助手界面通过；客户端完整使用矩阵未完成 |
+| macOS Intel | 启用 | 不支持 | 启用 | 启用 | 启用 | 自动安装 | 直接应用包链与 Intel 验证制品启动通过；正式公证待完成 |
+| macOS Apple Silicon | 启用 | 官方安装向导 | 启用 | 启用 | 启用 | 自动安装 | M1 原生构建与安装助手界面通过；客户端完整使用矩阵未完成 |
 
 支持状态的权威代码来源是 [`config/trust-registry.toml`](../config/trust-registry.toml)。远端元数据只能在该文件定义的边界内提供版本和地址，不能扩大信任范围。
 
@@ -61,7 +61,7 @@
 - 历史验证覆盖过 WorkBuddy、CC Switch、Claude 和 ChatGPT 的 Intel/Apple Silicon 下载、身份验证和临时激活链，不保证厂商后续包身份保持不变。首次结果见 [Apple Silicon 原生开发验证](../evidence/apple-silicon-native-validation-2026-09-06.md)，后续修复及四平台最新检查见 [安装来源审计](../evidence/distribution-source-audit-2026-09-06.md)。
 - WorkBuddy 官方 API 提供的 macOS SHA-256 与实际 CDN 文件不一致。只有 WorkBuddy/macOS 使用专用策略：记录厂商摘要异常，并继续强制 Apple 签名、固定 Bundle ID、Team ID、版本、目标架构和稳定文件绑定；该策略不能复用于其他产品。
 - Claude 和 ChatGPT 的受验证回退只在明确网络或地区可用性失败时进入，且必须与官方候选的版本、架构、包型和签名完全一致。
-- Hermes Apple Silicon DMG 是厂商 bootstrap，默认追踪 `main`，setup 版本、官网版本和最终桌面/runtime 版本不同；最终应用安装与复检尚未实现，因此保持禁用。Windows bootstrap 源码同样存在可变分支与下游镜像回退，历史安装通过不能证明当前来源可重复。
+- Hermes Apple Silicon DMG 是厂商 bootstrap，默认追踪 `main`，setup 版本、官网版本和最终桌面/runtime 版本不同；最终应用安装与复检尚未实现，因此交给官方 setup 向导，不把退出当成安装成功。Windows bootstrap 源码同样存在可变分支与下游镜像回退，历史安装通过不能证明当前来源可重复。
 
 ## 发布与验证 Gate
 

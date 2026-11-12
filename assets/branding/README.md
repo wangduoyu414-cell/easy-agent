@@ -1,6 +1,6 @@
-# easy agent 品牌资源
+# 奇米智能助手 品牌资源
 
-`easy-agent-icon.png` 是项目所有者于 2026-08-04 提供的原始应用图标。本目录中的其他文件均从该原图无生成式转换而来：
+`easy-agent-icon.png` 是项目所有者于 2026-11-12 提供的头像裁剪并加透明圆角后的主图标。本目录中的其他文件均从该原图无生成式转换而来：
 
 - `easy-agent-icon-512.png`：eframe 运行时窗口图标与 GitHub README 标识；
 - `easy-agent.ico`：Windows EXE 资源；

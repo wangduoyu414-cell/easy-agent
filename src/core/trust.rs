@@ -74,6 +74,8 @@ pub struct TrustEntry {
     pub distribution: DistributionKind,
     pub enabled: bool,
     #[serde(default)]
+    pub download_only: bool,
+    #[serde(default)]
     pub unsupported: bool,
     pub status_reason: String,
     pub entry_urls: Vec<String>,
@@ -173,6 +175,30 @@ impl TrustRegistry {
                 entry.os.key(),
                 entry.architecture.key(),
             );
+            if entry.download_only
+                && (entry.enabled
+                    || entry.unsupported
+                    || entry.os != OperatingSystem::MacOs
+                    || !matches!(
+                        (entry.product, entry.architecture),
+                        (ProductId::Hermes, Architecture::Arm64)
+                            | (
+                                ProductId::ClashVergeRev,
+                                Architecture::Arm64 | Architecture::X64
+                            )
+                    )
+                    || entry.package_kinds.as_slice() != [PackageKind::Dmg]
+                    || entry.entry_urls.len() != 1
+                    || entry.macos_team_id.as_deref().is_none_or(str::is_empty)
+                    || entry.macos_bundle_id.as_deref().is_none_or(str::is_empty))
+            {
+                return Err(TrustRegistryError::Invalid(
+                    key.0.into(),
+                    key.1.into(),
+                    key.2.into(),
+                    "invalid macOS download-only contract".into(),
+                ));
+            }
             if !keys.insert(key) {
                 return Err(TrustRegistryError::Duplicate(
                     key.0.into(),

@@ -10,7 +10,7 @@ build_root="${EASY_AGENT_MACOS_BUILD_ROOT:-$repo_root/target}"
 if [[ "$build_root" != /* ]]; then
   build_root="$repo_root/$build_root"
 fi
-app_name="easy agent"
+app_name="奇米智能助手"
 bundle_dir="$dist_dir/$app_name.app"
 image_source_dir="$build_root/dmg-root"
 binary_name="easy-agent"

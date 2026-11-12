@@ -7,13 +7,13 @@ fn main() {
 
     let mut resource = winresource::WindowsResource::new();
     resource.set_icon("assets/branding/easy-agent.ico");
-    resource.set("ProductName", "easy agent");
+    resource.set("ProductName", "奇米智能助手");
     resource.set("CompanyName", "奇米科技 (QIMI Studio)");
-    resource.set("FileDescription", "easy agent");
+    resource.set("FileDescription", "奇米智能助手");
     resource.set("InternalName", "easy-agent");
     resource.set("OriginalFilename", "easy-agent.exe");
     resource.set("LegalCopyright", "Copyright (c) 奇米科技 (QIMI Studio)");
     resource
         .compile()
-        .expect("failed to embed the easy agent Windows icon and version metadata");
+        .expect("failed to embed the 奇米智能助手 Windows icon and version metadata");
 }

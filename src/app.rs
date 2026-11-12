@@ -28,6 +28,7 @@ enum UiEvent {
         log_warning: Option<String>,
     },
     ProductScanFinished(ProductId),
+    DownloadFinished(ProductId, Result<std::path::PathBuf, String>),
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,7 @@ struct ProductTask {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProductRowAction {
     Open(ProductId),
+    Download(ProductId),
     Cancel(ProductId),
 }
 
@@ -363,6 +365,26 @@ impl InstallerApp {
                 }
                 (result.state == OperationState::Succeeded).then_some(result.product)
             }
+            UiEvent::DownloadFinished(product, result) => {
+                let cancelled = self
+                    .tasks
+                    .remove(&product)
+                    .is_some_and(|t| t.cancel_requested);
+                let message = match result {
+                    Ok(path) => format!(
+                        "{}：安装向导已退出；最终安装状态未确认。安装包：{}",
+                        product.display_name(),
+                        path.display()
+                    ),
+                    Err(_) if cancelled => format!("{}：下载已取消", product.display_name()),
+                    Err(err) => format!("{} 安装任务失败：{err}", product.display_name()),
+                };
+                self.batch_summary = Some(message.clone());
+                if let Some(view) = self.products.iter_mut().find(|v| v.product == product) {
+                    view.status_line = message;
+                }
+                None
+            }
             UiEvent::ProductScanFinished(product) => {
                 self.pending_scans.remove(&product);
                 self.scanning = !self.pending_scans.is_empty();
@@ -480,6 +502,38 @@ impl InstallerApp {
         });
     }
 
+    fn download_only(&self, product: ProductId) -> bool {
+        self.registry
+            .as_ref()
+            .and_then(|r| r.find(product, self.platform.os, self.platform.architecture))
+            .is_some_and(|t| t.download_only)
+    }
+
+    fn start_download_only(&mut self, product: ProductId) {
+        if !self.download_only(product) || self.tasks.contains_key(&product) {
+            return;
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.tasks.insert(
+            product,
+            ProductTask {
+                state: OperationState::Downloading,
+                download_progress: None,
+                cancel: cancel.clone(),
+                cancel_requested: false,
+            },
+        );
+        self.batch_summary = None;
+        let arch = self.platform.architecture;
+        let sender = self.event_sender.clone();
+        thread::spawn(move || {
+            let result = crate::mac_download::start_hermes(arch, &cancel, |update| {
+                let _ = sender.send(UiEvent::Operation(update));
+            });
+            let _ = sender.send(UiEvent::DownloadFinished(product, result));
+        });
+    }
+
     fn request_cancel(&mut self, product: ProductId) {
         let Some(task) = self.tasks.get_mut(&product) else {
             return;
@@ -548,7 +602,7 @@ impl eframe::App for InstallerApp {
                             ui.add_space(11.0);
                             ui.vertical(|ui| {
                                 ui.label(
-                                    RichText::new("easy agent")
+                                    RichText::new("奇米智能助手")
                                         .size(28.0)
                                         .strong()
                                         .color(Color32::from_rgb(18, 22, 29)),
@@ -587,6 +641,7 @@ impl eframe::App for InstallerApp {
                                     view,
                                     self.pending_scans.contains(&view.product),
                                     self.tasks.get(&view.product),
+                                    self.download_only(view.product),
                                 ) {
                                     row_action = Some(action);
                                 }
@@ -659,6 +714,7 @@ impl eframe::App for InstallerApp {
                 Some(ProductRowAction::Open(product)) => {
                     self.open_confirmation_for(product);
                 }
+                Some(ProductRowAction::Download(product)) => self.start_download_only(product),
                 Some(ProductRowAction::Cancel(product)) => self.request_cancel(product),
                 None => {}
             }
@@ -949,6 +1005,7 @@ fn draw_product_row(
     view: &ProductView,
     scanning: bool,
     task: Option<&ProductTask>,
+    download_only: bool,
 ) -> Option<ProductRowAction> {
     let active_state = task.map(|task| task.state);
     let row_height = 82.0;
@@ -988,7 +1045,11 @@ fn draw_product_row(
                             .color(Color32::from_rgb(24, 28, 35)),
                     );
                     ui.add_space(4.0);
-                    let subtitle = product_subtitle(view, scanning, active_state);
+                    let subtitle = if download_only && active_state.is_none() {
+                        "自动下载并验证，随后打开 Hermes 官方安装向导".into()
+                    } else {
+                        product_subtitle(view, scanning, active_state)
+                    };
                     let detail = product_detail(view);
                     let subtitle_response = ui.add(
                         egui::Label::new(
@@ -1031,6 +1092,8 @@ fn draw_product_row(
                     } else {
                         (operation_button_label(state), false)
                     }
+                } else if download_only {
+                    ("启动安装向导", true)
                 } else {
                     product_action(view, scanning)
                 };
@@ -1074,6 +1137,8 @@ fn draw_product_row(
     );
     clicked.then_some(if task.is_some() {
         ProductRowAction::Cancel(view.product)
+    } else if download_only {
+        ProductRowAction::Download(view.product)
     } else {
         ProductRowAction::Open(view.product)
     })
@@ -1392,7 +1457,7 @@ fn product_install_notice(
 }
 
 // 奇米科技官网地址固定编译进应用,不接受远端下发
-const QIMI_WEBSITE_URL: &str = "https://wangduoyu.vip/";
+const QIMI_WEBSITE_URL: &str = "https://www.wangduoyu.online/";
 
 const fn support_display_rank(support: &SupportState) -> u8 {
     match support {

@@ -36,7 +36,7 @@
 - Anthropic 现已在 macOS 企业部署文档中推荐 Universal PKG。当前项目仍采用面向普通用户、无需整体 root 运行的 DMG 应用包策略；除非单独实现并验证 PKG 签名、安装收据、按需提权、失败恢复和复检链，否则不要把 PKG URL直接塞进现有 DMG 适配器。
 - WorkBuddy macOS 摘要策略：厂商接口当前给出的 Intel/Apple Silicon SHA-256 均与同 URL 下载的完整 ZIP 不一致，所以这两个固定条目使用 `platform_signature_only`。远端摘要仍必须解析、比较并记录警告；下载完成后仍以实际 SHA-256、规范路径和长度形成稳定文件身份，并在 Apple 平台验证前后重复核对。只有 WorkBuddy、macOS、ZIP、`direct_app_bundle`、Bundle ID `com.workbuddy.workbuddy`、Team ID `FN2V63AD2J` 的组合可使用该策略，其他条目仍按默认摘要策略失败关闭。
 - WorkBuddy macOS 运行日志：厂商应用首次运行会在固定 `tencent-docs-ai-engine/bin/darwin-{x64|arm64}/editor_sdk.log` 路径新增日志，破坏资源封印。只允许已安装状态扫描对这一条普通、不可执行、大小受限的日志做专用识别，并要求 codesign 严格失败输出中没有其他新增或修改，随后以 `--ignore-resources` 重新验证根代码签名。候选包、安装暂存、最终激活和其他产品仍必须通过完整深度 codesign；最终激活继续通过 Gatekeeper，不得推广该例外。
-- macOS 安装：只检查用户/系统 Applications；首次安装优先使用可写的系统 `/Applications`，无权限时才使用 `~/Applications`，已有可信应用保持原位置。归档路径、展开大小和链接先后双重校验，DMG 只读挂载；固定应用名、Bundle ID、Developer Team ID、主 executable slice、updater 签名、完整代码签名和 Gatekeeper 全部通过后才能复制，最终应用还必须成功注册 LaunchServices。下载前检查目标目录权限和运行中主进程，不得清除 quarantine。
+- macOS 安装：只检查用户/系统 Applications；首次安装优先使用可写的系统 `/Applications`，无权限时才使用 `~/Applications`，已有可信应用保持原位置。归档路径、展开大小和链接先后双重校验，DMG 只读挂载；固定应用名、Bundle ID、Developer Team ID、主 executable slice、updater 签名、完整代码签名和 Gatekeeper 全部通过后才能复制，最终应用还必须成功注册 LaunchServices。下载、验证并保存副本后，在写入 Applications 前检查目标目录权限和运行中主进程，不得清除 quarantine。
 - macOS 更新：同名但错误 Bundle ID、同时存在两份应用、不可写的系统 Applications 或无法确认签名时都失败关闭。替换前保留同卷备份；最终复验失败必须回滚，回滚失败必须保留备份位置并报告，不能自动清理旧版。
 - macOS 系统命令：元数据命令默认 30 秒，codesign/Gatekeeper 120 秒，LaunchServices 60 秒，DMG 5 分钟，解压与复制 15 分钟。超时必须终止独立进程组并 `wait` 回收，不能只杀父进程或留下孤立 `spctl`/`codesign`。日常状态扫描只做固定 Bundle/Team/版本/架构与根签名检查；深度 codesign 和 Gatekeeper 保留在候选包与最终激活边界，避免刷新状态重复执行完整安装级检查。
 

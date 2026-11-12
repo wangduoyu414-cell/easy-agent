@@ -1,4 +1,4 @@
-name: Build easy agent macOS Universal validation DMG
+name: Build 奇米智能助手 macOS Universal validation DMG
 
 on:
   workflow_dispatch:
@@ -42,8 +42,8 @@ jobs:
 
       - name: Record architecture and signatures
         run: |
-          lipo -info "dist/easy agent.app/Contents/MacOS/easy-agent"
-          codesign --verify --deep --strict --verbose=2 "dist/easy agent.app"
+          lipo -info "dist/奇米智能助手.app/Contents/MacOS/easy-agent"
+          codesign --verify --deep --strict --verbose=2 "dist/奇米智能助手.app"
           codesign --verify --verbose=2 "dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg"
           shasum -a 256 "dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg"
 

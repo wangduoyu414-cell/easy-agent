@@ -117,6 +117,19 @@ pub fn resolve_install_plan(
                 }
                 ProductId::Hermes => {
                     let (_, source) = fetch_official_text(&client, &entry_url, trust)?;
+                    if platform.os == OperatingSystem::Windows {
+                        let url = Url::parse(
+                            "https://api.github.com/repos/NousResearch/hermes-agent/releases/latest",
+                        )?;
+                        let (_, release) = fetch_official_text(&client, &url, trust)?;
+                        let version = super::hermes::stable_version(&release)?;
+                        return Ok(super::hermes::parse_with_version(
+                            &source,
+                            platform.os,
+                            platform.architecture,
+                            Some(&version),
+                        )?);
+                    }
                     Ok(parse_hermes_homepage(
                         &source,
                         platform.os,
@@ -133,6 +146,13 @@ pub fn resolve_install_plan(
                 }
                 ProductId::ClashVergeRev => {
                     let (_, source) = fetch_official_text(&client, &entry_url, trust)?;
+                    if platform.os == OperatingSystem::MacOs {
+                        return crate::mac_download::clash_candidate(
+                            &source,
+                            platform.architecture,
+                        )
+                        .map_err(|e| AdapterError::Contract(e).into());
+                    }
                     Ok(parse_clash_verge_rev_manifest(
                         &source,
                         platform.os,
@@ -141,7 +161,42 @@ pub fn resolve_install_plan(
                 }
                 ProductId::Claude => {
                     let official = (|| -> Result<ReleaseCandidate, ResolveError> {
-                        let final_url = resolve_official_url(&client, &entry_url, trust)?;
+                        let final_url = match resolve_official_url(&client, &entry_url, trust) {
+                            Ok(url) => url,
+                            Err(error) => {
+                                let primary = ResolveError::Http(error);
+                                if platform.os != OperatingSystem::MacOs
+                                    || !official_failure_allows_mirror(&primary)
+                                {
+                                    return Err(primary);
+                                }
+                                let index = Url::parse(
+                                    "https://downloads.claude.ai/releases/darwin/universal/RELEASES.json",
+                                )?;
+                                // An index or sibling absent during a staggered rollout
+                                // must not disable the existing signed-mirror path.
+                                let (_, body) = match fetch_official_text(&client, &index, trust) {
+                                    Err(HttpError::HttpStatus(reqwest::StatusCode::NOT_FOUND)) => {
+                                        return Err(primary);
+                                    }
+                                    result => result?,
+                                };
+                                let dmg = super::claude::macos_dmg_from_release_index(&body)?;
+                                let observed = match resolve_official_url(&client, &dmg, trust) {
+                                    Err(HttpError::HttpStatus(reqwest::StatusCode::NOT_FOUND)) => {
+                                        return Err(primary);
+                                    }
+                                    result => result?,
+                                };
+                                if observed != dmg {
+                                    return Err(AdapterError::Contract(
+                                        "unexpected redirect for indexed Claude DMG".into(),
+                                    )
+                                    .into());
+                                }
+                                observed
+                            }
+                        };
                         Ok(candidate_from_claude_redirect(
                             final_url.as_str(),
                             platform.os,

@@ -1,4 +1,4 @@
-name: Build easy agent Windows validation executables
+name: Build 奇米智能助手 Windows validation executables
 
 on:
   workflow_dispatch:

@@ -326,8 +326,6 @@ fn install_direct_package(
         PreinstallDecision::AlreadyCurrent(message) => return Ok(message),
         PreinstallDecision::Reject(message) => return Err(InstallOneError::Failed(message)),
     }
-    preflight_direct_install(trust, candidate.architecture)
-        .map_err(|error| InstallOneError::Failed(format!("安装前检查失败：{error}")))?;
 
     let mut active_candidate = candidate.clone();
     let download = match download_candidate(
@@ -443,6 +441,13 @@ fn install_direct_package(
     } else {
         None
     };
+    // A running target prevents activation, not downloading a verified package.
+    preflight_direct_install(trust, candidate.architecture).map_err(|error| {
+        InstallOneError::Failed(format!(
+            "安装包已验证并保存到系统“下载”目录；未安装：{error}"
+        ))
+    })?;
+
     if cancel.load(Ordering::Relaxed) {
         return Err(InstallOneError::Cancelled("已在启动安装器前取消".into()));
     }

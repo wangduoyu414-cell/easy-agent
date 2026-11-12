@@ -1,4 +1,4 @@
-name: Publish easy agent preview release
+name: Publish 奇米智能助手 preview release
 
 on:
   push:
@@ -86,8 +86,8 @@ jobs:
 
       - name: Verify Universal architecture and ad-hoc signatures
         run: |
-          lipo -info "dist/easy agent.app/Contents/MacOS/easy-agent"
-          codesign --verify --deep --strict --verbose=2 "dist/easy agent.app"
+          lipo -info "dist/奇米智能助手.app/Contents/MacOS/easy-agent"
+          codesign --verify --deep --strict --verbose=2 "dist/奇米智能助手.app"
           codesign --verify --verbose=2 "dist/easy-agent-macos-universal-UNNOTARIZED-VALIDATION.dmg"
 
       - name: Upload macOS release asset
@@ -132,10 +132,10 @@ jobs:
             此版本用于公开测试验证，不是已签名的正式发行版。
 
             本次改进：
-            - 修复 WorkBuddy macOS 官方包 Bundle ID 迁移；旧身份仅用于识别同 Team 的已安装应用，新下载和安装后复检仍严格固定当前身份。
-            - 增加 Hermes Mac 安装布局、桌面签名完整性和绑定后端进程的只读诊断；官方 bootstrap 仍未固定稳定版本，安装入口保持禁用。
-            - 固定依赖解析及 macOS 最低部署版本；此 Universal DMG 在 Apple Silicon runner 上构建，包含 arm64 和 x86_64。
-            - 补充 M1 真机、官方安装来源与 Hermes 固定源码真实联调证据。
+            - Windows 和 macOS 统一为「奇米智能助手」，采用圆角品牌图标，官网为 https://www.wangduoyu.online/ 。
+            - Clash Verge Rev 支持两种 Mac 架构的官方下载、签名验证、安装和版本复检；已在临时目标验证首次安装、重复替换与回滚。
+            - Hermes Apple Silicon 自动下载并启动官方签名向导，厂商确认仍需手动完成；不把向导退出当成最终安装成功。
+            - 修复 Claude Mac 入口 403 时的官方 CDN 解析，以及 Windows Hermes 官网移除版本信息后的解析。
 
             下载文件：
             - `easy-agent-windows-x64.exe`：Windows x64，未做 Authenticode 签名。
@@ -149,5 +149,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --prerelease \
-            --title "easy agent $GITHUB_REF_NAME（测试预览版）" \
+            --title "奇米智能助手 $GITHUB_REF_NAME（测试预览版）" \
             --notes "$RELEASE_NOTES"

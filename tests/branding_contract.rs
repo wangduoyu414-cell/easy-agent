@@ -8,7 +8,7 @@ const BRAND_ICON: &[u8] = include_bytes!("../assets/branding/easy-agent-icon-512
 
 #[test]
 fn easy_agent_branding_is_consistent_across_runtime_and_packages() {
-    assert_eq!(APP_NAME, "easy agent");
+    assert_eq!(APP_NAME, "奇米智能助手");
     assert_eq!(APP_ID, "io.github.wangduoyu414-cell.easy-agent");
 
     let runtime_icon = eframe::icon_data::from_png_bytes(BRAND_ICON).unwrap();

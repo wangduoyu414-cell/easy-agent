@@ -177,11 +177,9 @@ fn embedded_registry_models_the_explicit_macos_support_matrix() {
                 architecture,
             )
             .unwrap();
-        assert!(
-            !clash_verge_rev.enabled,
-            "Clash Verge Rev macOS stays disabled until bundle identity evidence exists"
-        );
-        assert!(clash_verge_rev.updater_public_key.is_some());
+        assert!(clash_verge_rev.enabled && !clash_verge_rev.download_only);
+        assert_eq!(clash_verge_rev.package_kinds.as_slice(), [PackageKind::Dmg]);
+        assert_eq!(clash_verge_rev.macos_team_id.as_deref(), Some("JPH3Z7PPBB"));
     }
     let chatgpt = registry
         .find(
